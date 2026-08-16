@@ -17,6 +17,8 @@ async def stream_agg_trades(symbols, on_message):
         connection = await client.websocket_streams.create_connection()
         for symbol in symbols:
             stream = await connection.agg_trade(symbol=symbol)
+            print("STREAM:", stream)
+            print("STREAM TYPE:", type(stream))
             stream.on("message", on_message)
         while True:
             await asyncio.sleep(1)
