@@ -1,22 +1,31 @@
+# ingestion/producer.py
+import asyncio
 import json
-import time
+from decouple import config
 from kafka import KafkaProducer
 
-# 1. Инициализиране на продуцента
+from ingestion.binance_client import stream_agg_trades
+
 producer = KafkaProducer(
-    bootstrap_servers=['localhost:9092'],  # Адрес на вашия Kafka брокер
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')  # Конвертиране в JSON формат
+    bootstrap_servers=[config('KAFKA_BROKER_ADDRESS')],
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-# Данни, които ще изпратим
-data = {"user_id": 42, "action": "click", "timestamp": time.time()}
+def on_trade_message(data):
+    producer.send('trade_streams', value=data)
+    print(f"Изпратено: {data}")
+    
 
-# 2. Изпращане на съобщението към темата 'user_clicks'
-topic_name = 'user_clicks'
-producer.send(topic_name, value=data)
+async def main():
+    symbols = ["bnbusdt", "btcusdt", "ethusdt"]
+    try:
+        await stream_agg_trades(symbols, on_trade_message)
+    finally:
+        producer.flush()
+        producer.close()
 
-# 3. Изчистване на буфера и затваряне
-producer.flush()
-producer.close()
-
-print("Съобщението е изпратено успешно!")
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nСкриптът е спрян от потребителя.")
