@@ -12,12 +12,11 @@ producer = KafkaProducer(
 )
 
 def on_trade_message(data):
-    print(">>> CALLBACK ВЛЕЗЕ")
     print(data, flush=True)
     future = producer.send('trade_streams', value=data.model_dump())
     try:
         metadata = future.get(timeout=10)
-        print(f"Kafka OK: topic={metadata.topic}, partition={metadata.partition}, offset={metadata.offset}")
+        print(f"topic={metadata.topic}, partition={metadata.partition}, offset={metadata.offset}")
     except Exception as e:
         print(f"Kafka ERROR: {e}")
 
