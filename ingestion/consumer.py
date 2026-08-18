@@ -1,3 +1,4 @@
+from decouple import config
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StructField, StringType, LongType, BooleanType
@@ -17,11 +18,16 @@ trade_schema = StructType([
     StructField("m", BooleanType()),
     StructField("M", BooleanType()),
 ])
-
+hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
+hadoop_conf.set("fs.s3a.endpoint", config("MINIO_ENDPOINT"))
+hadoop_conf.set("fs.s3a.access.key", config("MINIO_ACCESS_KEY"))
+hadoop_conf.set("fs.s3a.secret.key", config("MINIO_SECRET_KEY"))
+hadoop_conf.set("fs.s3a.path.style.access", "true")
+hadoop_conf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
 # 1. Четене от Kafka
 raw = spark.readStream \
     .format("kafka") \
-    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("kafka.bootstrap.servers", config("KAFKA_BROKER_ADDRESS")) \
     .option("subscribe", "trade_streams") \
     .load()
 
@@ -33,9 +39,10 @@ parsed = raw.select(
 # 3. writeStream -
 # 3. Извеждане на конзолата за проверка
 query = parsed.writeStream \
-    .format("console") \
+    .format("parquet") \
+    .option("path", "s3a://trades-raw/raw/") \
+    .option("checkpointLocation", "/tmp/spark-checkpoints/trades") \
     .outputMode("append") \
-    .option("truncate", "false") \
     .start()
 
 query.awaitTermination()
