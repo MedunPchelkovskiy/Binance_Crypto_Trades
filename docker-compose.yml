@@ -61,6 +61,22 @@ services:
     networks:
       - trades_stream_network
 
+  spark_processing:
+    image: pchelkovskiy/my-spark-processing
+    container_name: my-spark-processing
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      KAFKA_BROKER_ADDRESS: ${KAFKA_BROKER_ADDRESS}
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - minio
+    networks:
+      - trades_stream_network
+
+
   minio:
     image: minio/minio:latest
     container_name: trades-stream-minio
@@ -69,8 +85,8 @@ services:
       - "9000:9000"   # API port
       - "9001:9001"   # Web console
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - minio_data:/data
     restart: unless-stopped

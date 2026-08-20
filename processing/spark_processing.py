@@ -37,7 +37,6 @@ parsed = raw.select(
 ).select("data.*")
 
 # 3. writeStream -
-# 3. Извеждане на конзолата за проверка
 query = parsed.writeStream \
     .format("parquet") \
     .option("path", "s3a://trades-raw/raw/") \
