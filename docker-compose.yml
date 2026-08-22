@@ -69,6 +69,8 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       KAFKA_BROKER_ADDRESS: ${KAFKA_BROKER_ADDRESS}
+    volumes:
+      - spark_checkpoints:/tmp/spark-checkpoints
     restart: unless-stopped
     depends_on:
       - kafka
@@ -96,6 +98,7 @@ services:
 volumes:
   kafka_data:
   minio_data:
+  spark_checkpoints:
 
 networks:
   trades_stream_network:

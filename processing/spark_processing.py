@@ -1,3 +1,6 @@
+import signal
+import sys
+
 from decouple import config
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
@@ -43,5 +46,13 @@ query = parsed.writeStream \
     .option("checkpointLocation", "/tmp/spark-checkpoints/trades") \
     .outputMode("append") \
     .start()
+
+
+def handle_sigterm(signum, frame):
+    query.stop()
+    sys.exit(0)
+
+
+signal.signal(signal.SIGTERM, handle_sigterm)
 
 query.awaitTermination()
