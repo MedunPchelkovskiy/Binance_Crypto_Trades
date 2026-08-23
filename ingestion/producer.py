@@ -6,12 +6,12 @@ import json
 from decouple import config
 from kafka import KafkaProducer
 
+from ingestion.avro_ser_deser import trade_serialize
 from ingestion.binance_client import stream_agg_trades
 from ingestion.validation import Trade
 
 producer = KafkaProducer(
-    bootstrap_servers=[config('KAFKA_BROKER_ADDRESS_DEV')],
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    bootstrap_servers=[config('KAFKA_BROKER_ADDRESS_DEV')]
 )
 
 
@@ -25,9 +25,14 @@ def on_trade_message(data):
     try:
         trade = Trade.model_validate(data.to_dict())
 
+    except Exception as e:
+        print(f"Validation ERROR: {e}")
+
+    try:
+        trade_bytes = trade_serialize(trade.model_dump())
         future = producer.send(
             'trade_streams_dev',
-            value=trade.model_dump()
+            value=trade_bytes
         )
 
         metadata = future.get(timeout=10)
@@ -36,20 +41,8 @@ def on_trade_message(data):
             f"partition={metadata.partition}, "
             f"offset={metadata.offset}"
         )
-
     except Exception as e:
-        print(f"Validation ERROR: {e}")
-
-
-
-# def on_trade_message(data):
-#     print(data, flush=True)
-#     future = producer.send('trade_streams', value=data.model_dump())
-#     try:
-#         metadata = future.get(timeout=10)
-#         print(f"topic={metadata.topic}, partition={metadata.partition}, offset={metadata.offset}")
-#     except Exception as e:
-#         print(f"Kafka ERROR: {e}")
+        print(f"Serialisation ERROR: {e}")
 
 
 async def main():

@@ -6,8 +6,8 @@ class Trade(BaseModel):
     E: int
     s: str
     a: int
-    p: float
-    q: float
+    p: str
+    q: str
     f: int
     l: int
     T: int
