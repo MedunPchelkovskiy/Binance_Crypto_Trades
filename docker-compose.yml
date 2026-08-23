@@ -1,4 +1,23 @@
 services:
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container_name: schema-registry
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      # Връзваме го към вътрешния листенър на вашата Кафка
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
+      # Тъй като сте с 1 брокер, това е задължително, за да не се срине контейнерът
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - kafka
+    restart: unless-stopped
+    networks:
+      - trades_stream_network
+
+
   producer:
     image: pchelkovskiy/my-producer
     container_name: binance-stream-producer
