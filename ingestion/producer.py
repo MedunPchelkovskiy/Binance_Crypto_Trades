@@ -13,7 +13,7 @@ from ingestion.validation import Trade
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # 1. Инициализация на Schema Registry Клиента
-schema_registry_conf = {'url': config('SCHEMA_REGISTRY_URL_DEV', default='http://localhost:8081')}
+schema_registry_conf = {'url': config('SCHEMA_REGISTRY_URL', default='http://localhost:8081')}
 schema_registry_client = SchemaRegistryClient(schema_registry_conf)
 
 # 2. Подаваме импортирания стринг директно на сериализатора
@@ -24,7 +24,7 @@ avro_serializer = AvroSerializer(
 
 # 3. Настройка на Confluent Kafka Producer
 producer_conf = {
-    'bootstrap.servers': config('KAFKA_BROKER_ADDRESS_DEV'),
+    'bootstrap.servers': config('KAFKA_BROKER_ADDRESS'),
     'acks': 'all'
 }
 producer = Producer(producer_conf)

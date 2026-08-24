@@ -1,0 +1,4 @@
+confluent-kafka[avro]
+fastavro
+boto3
+python-decouple

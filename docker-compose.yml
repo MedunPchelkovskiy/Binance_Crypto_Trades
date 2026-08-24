@@ -24,9 +24,11 @@ services:
     environment:
       STREAM_URL: wss://stream.binance.com:9443/stream
       KAFKA_BROKER_ADDRESS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
     restart: unless-stopped
     depends_on:
       - kafka
+      - schema-registry
     networks:
       - trades_stream_network
 
@@ -80,20 +82,20 @@ services:
     networks:
       - trades_stream_network
 
-  spark_processing:
-    image: pchelkovskiy/my-spark-processing
-    container_name: my-spark-processing
+  bronze_consumer:
+    image: pchelkovskiy/bronze-minio-consumer
+    container_name: bronze-consumer
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      KAFKA_BROKER_ADDRESS: ${KAFKA_BROKER_ADDRESS}
-    volumes:
-      - spark_checkpoints:/tmp/spark-checkpoints
+      MINIO_ENDPOINT: http://minio:9000
+      KAFKA_BROKER_ADDRESS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
     restart: unless-stopped
     depends_on:
       - kafka
       - minio
+      - schema-registry
     networks:
       - trades_stream_network
 

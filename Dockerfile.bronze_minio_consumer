@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-bronze.txt .
+
+RUN pip install --no-cache-dir -r requirements-bronze.txt
+
+COPY consumers ./consumers
+COPY schemas ./schemas
+
+CMD ["python", "-m", "consumers.bronze_consumer"]
