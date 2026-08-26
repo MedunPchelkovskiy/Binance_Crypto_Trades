@@ -116,10 +116,37 @@ services:
     networks:
       - trades_stream_network
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: trades-stream-click-house
+
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # Native ClickHouse protocol
+
+    environment:
+      CLICKHOUSE_DB: trades
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+
+    restart: unless-stopped
+
+    networks:
+      - trades_stream_network
+
+
+
 volumes:
   kafka_data:
   minio_data:
   spark_checkpoints:
+  clickhouse_data:
+  clickhouse_logs:
 
 networks:
   trades_stream_network:
