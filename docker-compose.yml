@@ -122,7 +122,7 @@ services:
 
     ports:
       - "8123:8123"   # HTTP
-      - "9000:9000"   # Native ClickHouse protocol
+      - "9009:9000"   # Native ClickHouse protocol
 
     environment:
       CLICKHOUSE_DB: trades
