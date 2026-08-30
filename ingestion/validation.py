@@ -1,3 +1,5 @@
+# ruff: noqa: E741
+
 from pydantic import BaseModel
 
 
