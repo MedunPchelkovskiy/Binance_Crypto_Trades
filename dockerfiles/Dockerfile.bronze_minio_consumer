@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements-bronze.txt .
+COPY requirements_files/requirements-bronze.txt .
 
 RUN pip install --no-cache-dir -r requirements-bronze.txt
 
