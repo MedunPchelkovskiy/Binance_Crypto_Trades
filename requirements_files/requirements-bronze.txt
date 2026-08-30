@@ -2,3 +2,4 @@ confluent-kafka[avro]
 fastavro
 boto3
 python-decouple
+ruff==0.12.10
