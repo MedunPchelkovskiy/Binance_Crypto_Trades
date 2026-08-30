@@ -74,7 +74,7 @@ parsed_schema = fastavro.parse_schema(_raw_schema)
 # --- Kafka consumer ---
 
 consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
     "group.id": CONSUMER_GROUP,
     "auto.offset.reset": "earliest",
     "enable.auto.commit": False,

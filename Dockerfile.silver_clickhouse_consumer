@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-clickhouse-silver.txt .
+
+RUN pip install --no-cache-dir -r requirements-clickhouse-silver.txt
+
+COPY consumers ./consumers
+COPY schemas ./schemas
+
+CMD ["python", "-m", "consumers.click_house_silver_consumer"]

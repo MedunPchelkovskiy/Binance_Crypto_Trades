@@ -100,6 +100,25 @@ services:
       - trades_stream_network
 
 
+  silver_consumer:
+    image: pchelkovskiy/silver-clickhouse-consumer
+    container_name: silver-consumer
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DATABASE: trades
+      KAFKA_BROKER_ADDRESS: kafka:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - clickhouse
+      - schema-registry
+    networks:
+      - trades_stream_network
+
   minio:
     image: minio/minio:latest
     container_name: trades-stream-minio

@@ -1,0 +1,71 @@
+# Изходни директории и компилиран код
+bin/
+obj/
+dist/
+build/
+out/
+target/
+
+# Зависимости (Packages & Modules)
+node_modules/
+bower_components/
+.pnp/
+.pnp.js
+jspm_packages/
+.venv/
+venv/
+env/
+ENV/
+pkg/
+
+# Хранилища за код (Версионен контрол)
+.git
+.gitignore
+.gitattributes
+.hg
+.svn
+
+# Локални конфигурации и секрети (Много важно!)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+id_rsa
+secrets.json
+
+# Логове и диагностика
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Кеш директории на инструменти
+.npm
+.eslintcache
+.parcel-cache
+.turbo
+.nuxt
+.next
+.cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Специфични файлове за операционни системи и IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Docker специфични файлове (обикновено не трябват вътре)
+Dockerfile
+Dockerfile.*
+.dockerignore
+docker-compose*.yml

@@ -1,0 +1,4 @@
+confluent-kafka[avro]
+fastavro
+clickhouse-connect
+python-decouple
