@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+
+  # ---- Service 1: TODO (напр. ingestion / producer) ----
+  build-my-producer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_files/requirements.txt
+
+      - name: Run lint
+        working-directory: ingestion
+        run: ruff check .
+
+      - name: Check syntax
+        working-directory: ingestion
+        run: python -m compileall .
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfiles/Dockerfile.producer
+          push: true
+          tags: pchelkovskiy/my-producer:latest
+
+  # ---- Service 2: TODO (напр. bronze consumer) ----
+  build-bronze-minio-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_files/requirements-bronze.txt
+
+      - name: Run lint
+        working-directory: consumers
+        run: ruff check .
+
+      - name: Check syntax
+        working-directory: consumers
+        run: python -m compileall .
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfiles/Dockerfile.bronze_minio_consumer
+          push: true
+          tags: pchelkovskiy/bronze-minio-consumer:latest
+
+  # ---- Service 3: TODO (напр. silver consumer) — копирай блока по-горе, ако имаш и трети ----
+  build-bronze-clickhouse-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_files/requirements-clickhouse-consumers.txt
+
+      - name: Run lint
+        working-directory: consumers
+        run: ruff check .
+
+      - name: Check syntax
+        working-directory: consumers
+        run: python -m compileall .
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfiles/Dockerfile.bronze_clickhouse_consumer
+          push: true
+          tags: pchelkovskiy/bronze-clickhouse-consumer:latest
+
+  # ---- Service 4: TODO (напр. silver consumer) — копирай блока по-горе, ако имаш и трети ----
+  build-silver-clickhouse-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_files/requirements-clickhouse-consumers.txt
+
+      - name: Run lint
+        working-directory: consumers
+        run: ruff check .
+
+      - name: Check syntax
+        working-directory: consumers
+        run: python -m compileall .
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
+          push: true
+          tags: pchelkovskiy/silver-clickhouse-consumer:latest
