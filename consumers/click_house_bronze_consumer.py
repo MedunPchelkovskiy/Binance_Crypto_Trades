@@ -6,7 +6,7 @@ Reads trade messages from Kafka (Avro, wire format with Schema Registry),
 buffers them into batches, and inserts them into ClickHouse for fast
 analytical queries and dashboarding (e.g. Grafana).
 
-This consumer runs independently from bronze_consumer.py (fan-out from
+This consumer runs independently from minio_bronze_consumer.py (fan-out from
 the same Kafka topic, separate consumer group) — MinIO remains the
 source-of-truth raw archive, ClickHouse is a query-optimized sink.
 
@@ -50,7 +50,7 @@ avro_deserializer = AvroDeserializer(
     schema_str=AVRO_TRADE_SCHEMA,
 )
 
-# Kept for parity with bronze_consumer.py, in case a fastavro-parsed schema
+# Kept for parity with minio_bronze_consumer.py, in case a fastavro-parsed schema
 # is needed elsewhere in this process (not required for ClickHouse insert).
 _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
 parsed_schema = fastavro.parse_schema(_raw_schema)
@@ -58,7 +58,7 @@ parsed_schema = fastavro.parse_schema(_raw_schema)
 # --- Kafka consumer ---
 
 consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
     "group.id": CONSUMER_GROUP,
     "auto.offset.reset": "earliest",
     "enable.auto.commit": False,  # manual commit, only after a successful insert

@@ -1,4 +1,4 @@
-# ingestion/bronze_consumer.py
+# ingestion/minio_bronze_consumer.py
 """
 Bronze layer consumer.
 
