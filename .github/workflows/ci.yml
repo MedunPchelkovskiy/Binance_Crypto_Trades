@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect changes
         id: filter
@@ -49,6 +51,13 @@ jobs:
               - 'consumers/silver_clickhouse_consumer.py'
               - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
               - 'requirements_files/requirements-clickhouse-consumers.txt'
+
+      - name: Debug filter output
+        run: |
+          echo "producer=${{ steps.filter.outputs.producer }}"
+          echo "bronze_minio=${{ steps.filter.outputs.bronze_minio }}"
+          echo "bronze_clickhouse=${{ steps.filter.outputs.bronze_clickhouse }}"
+          echo "silver_clickhouse=${{ steps.filter.outputs.silver_clickhouse }}"
 
   # ---- Service 1:
   build-my-producer:
