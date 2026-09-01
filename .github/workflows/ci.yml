@@ -10,7 +10,45 @@ on:
 
 jobs:
 
-  # ---- Service 1: TODO (напр. ingestion / producer) ----
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      producer: ${{ steps.filter.outputs.producer }}
+      bronze_minio: ${{ steps.filter.outputs.bronze_minio }}
+      bronze_clickhouse: ${{ steps.filter.outputs.bronze_clickhouse }}
+      silver_clickhouse: ${{ steps.filter.outputs.silver_clickhouse }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: main
+          filters: |
+            producer:
+              - 'ingestion/**'
+              - 'dockerfiles/Dockerfile.producer'
+              - 'requirements_files/requirements.txt'
+            
+            bronze_minio:
+              - 'consumers/bronze_minio_consumer.py'
+              - 'dockerfiles/Dockerfile.bronze_minio_consumer'
+              - 'requirements_files/requirements-bronze.txt'
+            
+            bronze_clickhouse:
+              - 'consumers/bronze_clickhouse_consumer.py'
+              - 'dockerfiles/Dockerfile.bronze_clickhouse_consumer'
+              - 'requirements_files/requirements-clickhouse-consumers.txt'
+            
+            silver_clickhouse:
+              - 'consumers/silver_clickhouse_consumer.py'
+              - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
+              - 'requirements_files/requirements-clickhouse-consumers.txt'
+
+  # ---- Service 1:
   build-my-producer:
     runs-on: ubuntu-latest
     steps:
@@ -48,8 +86,10 @@ jobs:
           file: ./dockerfiles/Dockerfile.producer
           push: true
           tags: pchelkovskiy/my-producer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # ---- Service 2: TODO (напр. bronze consumer) ----
+  # ---- Service 2:
   build-bronze-minio-consumer:
     runs-on: ubuntu-latest
     steps:
@@ -87,8 +127,10 @@ jobs:
           file: ./dockerfiles/Dockerfile.bronze_minio_consumer
           push: true
           tags: pchelkovskiy/bronze-minio-consumer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # ---- Service 3: TODO (напр. silver consumer) — копирай блока по-горе, ако имаш и трети ----
+  # ---- Service 3:
   build-bronze-clickhouse-consumer:
     runs-on: ubuntu-latest
     steps:
@@ -126,8 +168,10 @@ jobs:
           file: ./dockerfiles/Dockerfile.bronze_clickhouse_consumer
           push: true
           tags: pchelkovskiy/bronze-clickhouse-consumer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # ---- Service 4: TODO (напр. silver consumer) — копирай блока по-горе, ако имаш и трети ----
+  # ---- Service 4:
   build-silver-clickhouse-consumer:
     runs-on: ubuntu-latest
     steps:
@@ -165,3 +209,5 @@ jobs:
           file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
           push: true
           tags: pchelkovskiy/silver-clickhouse-consumer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
