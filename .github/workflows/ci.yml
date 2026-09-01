@@ -38,17 +38,17 @@ jobs:
               - 'requirements_files/requirements.txt'
 
             bronze_minio:
-              - 'consumers/bronze_minio_consumer.py'
+              - 'consumers/minio_bronze_consumer.py'
               - 'dockerfiles/Dockerfile.bronze_minio_consumer'
               - 'requirements_files/requirements-bronze.txt'
 
             bronze_clickhouse:
-              - 'consumers/bronze_clickhouse_consumer.py'
+              - 'consumers/click_house_bronze_consumer.py'
               - 'dockerfiles/Dockerfile.bronze_clickhouse_consumer'
               - 'requirements_files/requirements-clickhouse-consumers.txt'
 
             silver_clickhouse:
-              - 'consumers/silver_clickhouse_consumer.py'
+              - 'consumers/click_house_silver_consumer.py'
               - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
               - 'requirements_files/requirements-clickhouse-consumers.txt'
 
