@@ -10,6 +10,9 @@ on:
 
 jobs:
 
+  # =========================================================
+  # Detect which services have changed
+  # =========================================================
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -32,17 +35,17 @@ jobs:
               - 'ingestion/**'
               - 'dockerfiles/Dockerfile.producer'
               - 'requirements_files/requirements.txt'
-            
+
             bronze_minio:
               - 'consumers/bronze_minio_consumer.py'
               - 'dockerfiles/Dockerfile.bronze_minio_consumer'
               - 'requirements_files/requirements-bronze.txt'
-            
+
             bronze_clickhouse:
               - 'consumers/bronze_clickhouse_consumer.py'
               - 'dockerfiles/Dockerfile.bronze_clickhouse_consumer'
               - 'requirements_files/requirements-clickhouse-consumers.txt'
-            
+
             silver_clickhouse:
               - 'consumers/silver_clickhouse_consumer.py'
               - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
@@ -50,6 +53,8 @@ jobs:
 
   # ---- Service 1:
   build-my-producer:
+    needs: changes
+    if: needs.changes.outputs.producer == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -79,6 +84,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -91,6 +99,8 @@ jobs:
 
   # ---- Service 2:
   build-bronze-minio-consumer:
+    needs: changes
+    if: needs.changes.outputs.bronze_minio == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -120,6 +130,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -132,6 +145,8 @@ jobs:
 
   # ---- Service 3:
   build-bronze-clickhouse-consumer:
+    needs: changes
+    if: needs.changes.outputs.bronze_clickhouse == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -160,6 +175,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -173,6 +191,8 @@ jobs:
 
   # ---- Service 4:
   build-silver-clickhouse-consumer:
+    needs: changes
+    if: needs.changes.outputs.silver_clickhouse == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -202,6 +222,9 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -211,3 +234,237 @@ jobs:
           tags: pchelkovskiy/silver-clickhouse-consumer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#name: CI
+#
+#on:
+#  push:
+#    branches:
+#      - main
+#  pull_request:
+#    branches:
+#      - main
+#
+#jobs:
+#
+#  changes:
+#    runs-on: ubuntu-latest
+#    outputs:
+#      producer: ${{ steps.filter.outputs.producer }}
+#      bronze_minio: ${{ steps.filter.outputs.bronze_minio }}
+#      bronze_clickhouse: ${{ steps.filter.outputs.bronze_clickhouse }}
+#      silver_clickhouse: ${{ steps.filter.outputs.silver_clickhouse }}
+#
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Detect changes
+#        id: filter
+#        uses: dorny/paths-filter@v3
+#        with:
+#          base: main
+#          filters: |
+#            producer:
+#              - 'ingestion/**'
+#              - 'dockerfiles/Dockerfile.producer'
+#              - 'requirements_files/requirements.txt'
+#
+#            bronze_minio:
+#              - 'consumers/bronze_minio_consumer.py'
+#              - 'dockerfiles/Dockerfile.bronze_minio_consumer'
+#              - 'requirements_files/requirements-bronze.txt'
+#
+#            bronze_clickhouse:
+#              - 'consumers/bronze_clickhouse_consumer.py'
+#              - 'dockerfiles/Dockerfile.bronze_clickhouse_consumer'
+#              - 'requirements_files/requirements-clickhouse-consumers.txt'
+#
+#            silver_clickhouse:
+#              - 'consumers/silver_clickhouse_consumer.py'
+#              - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
+#              - 'requirements_files/requirements-clickhouse-consumers.txt'
+#
+#  # ---- Service 1:
+#  build-my-producer:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.12"
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --upgrade pip
+#          pip install -r requirements_files/requirements.txt
+#
+#      - name: Run lint
+#        working-directory: ingestion
+#        run: ruff check .
+#
+#      - name: Check syntax
+#        working-directory: ingestion
+#        run: python -m compileall .
+#
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKERHUB_USERNAME }}
+#          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#
+#      - name: Build and push Docker image
+#        uses: docker/build-push-action@v6
+#        with:
+#          context: .
+#          file: ./dockerfiles/Dockerfile.producer
+#          push: true
+#          tags: pchelkovskiy/my-producer:latest
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
+#
+#  # ---- Service 2:
+#  build-bronze-minio-consumer:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.12"
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --upgrade pip
+#          pip install -r requirements_files/requirements-bronze.txt
+#
+#      - name: Run lint
+#        working-directory: consumers
+#        run: ruff check .
+#
+#      - name: Check syntax
+#        working-directory: consumers
+#        run: python -m compileall .
+#
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKERHUB_USERNAME }}
+#          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#
+#      - name: Build and push Docker image
+#        uses: docker/build-push-action@v6
+#        with:
+#          context: .
+#          file: ./dockerfiles/Dockerfile.bronze_minio_consumer
+#          push: true
+#          tags: pchelkovskiy/bronze-minio-consumer:latest
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
+#
+#  # ---- Service 3:
+#  build-bronze-clickhouse-consumer:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.12"
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --upgrade pip
+#          pip install -r requirements_files/requirements-clickhouse-consumers.txt
+#
+#      - name: Run lint
+#        working-directory: consumers
+#        run: ruff check .
+#
+#      - name: Check syntax
+#        working-directory: consumers
+#        run: python -m compileall .
+#
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKERHUB_USERNAME }}
+#          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#
+#      - name: Build and push Docker image
+#        uses: docker/build-push-action@v6
+#        with:
+#          context: .
+#          file: ./dockerfiles/Dockerfile.bronze_clickhouse_consumer
+#          push: true
+#          tags: pchelkovskiy/bronze-clickhouse-consumer:latest
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
+#
+#  # ---- Service 4:
+#  build-silver-clickhouse-consumer:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.12"
+#
+#      - name: Install dependencies
+#        run: |
+#          python -m pip install --upgrade pip
+#          pip install -r requirements_files/requirements-clickhouse-consumers.txt
+#
+#      - name: Run lint
+#        working-directory: consumers
+#        run: ruff check .
+#
+#      - name: Check syntax
+#        working-directory: consumers
+#        run: python -m compileall .
+#
+#      - name: Login to Docker Hub
+#        uses: docker/login-action@v3
+#        with:
+#          username: ${{ secrets.DOCKERHUB_USERNAME }}
+#          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#
+#      - name: Build and push Docker image
+#        uses: docker/build-push-action@v6
+#        with:
+#          context: .
+#          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
+#          push: true
+#          tags: pchelkovskiy/silver-clickhouse-consumer:latest
+#          cache-from: type=gha
+#          cache-to: type=gha,mode=max
