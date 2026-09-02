@@ -231,7 +231,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-  # put some shit test texttttttttttttttt
-  #s;dkjvnfqapefdjgvnq
-  #SDPKJFNPKjfnF
-  #SAPKJDPSFJNPWEjfnFPKJnpijj
