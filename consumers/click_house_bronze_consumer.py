@@ -4,16 +4,13 @@ ClickHouse consumer.
 
 Reads trade messages from Kafka (Avro, wire format with Schema Registry),
 buffers them into batches, and inserts them into ClickHouse for fast
-
 analytical queries and dashboarding (e.g. Grafana).
 
 This consumer runs independently from minio_bronze_consumer.py (fan-out from
 the same Kafka topic, separate consumer group) — MinIO remains the
-
 source-of-truth raw archive, ClickHouse is a query-optimized sink.
 
 Manual offset commit — only after a successful insert into ClickHouse.
-
 If the insert fails, messages are re-consumed on next start (at-least-once).
 """
 
