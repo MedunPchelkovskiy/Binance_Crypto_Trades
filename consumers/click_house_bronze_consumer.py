@@ -16,6 +16,8 @@ If the insert fails, messages are re-consumed on next start (at-least-once).
 
 import json
 import time
+import uuid
+from datetime import datetime, timezone
 
 import clickhouse_connect
 import fastavro
@@ -25,6 +27,8 @@ from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 
+from monitoring.metrics_measurement import measure_batch
+from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Configuration ---
@@ -32,8 +36,8 @@ from schemas.trade_schema import AVRO_TRADE_SCHEMA
 TOPIC = "trade_streams_avro_dev"
 CONSUMER_GROUP = "clickhouse-consumer-group"
 
-BATCH_SIZE = 500          # number of records before a forced flush
-BATCH_TIMEOUT_SEC = 30    # max wait before flush, even if batch is not full
+BATCH_SIZE = 500  # number of records before a forced flush
+BATCH_TIMEOUT_SEC = 30  # max wait before flush, even if batch is not full
 
 CLICKHOUSE_TABLE = "binance_agg_trades_bronze"
 
@@ -104,7 +108,22 @@ def main():
 
             if msg is None:
                 if buffer_records and timed_out:
-                    write_batch_to_clickhouse(buffer_records)
+
+                    batch_id = str(uuid.uuid4())
+                    result, metrics = measure_batch(
+                        write_batch_to_clickhouse,
+                        buffer_records,
+                        extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+                    )
+                    write_pipeline_metrics(
+                        clickhouse_client,
+                        layer="bronze",
+                        batch_id=batch_id,
+                        batch_timestamp=datetime.now(timezone.utc),
+                        metrics=metrics,
+                    )
+
+                    # write_batch_to_clickhouse(buffer_records)
                     consumer.commit(asynchronous=False)
                     buffer_records.clear()
                     last_flush_time = time.monotonic()
@@ -127,7 +146,22 @@ def main():
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
                 if buffer_records:
-                    write_batch_to_clickhouse(buffer_records)
+
+                    batch_id = str(uuid.uuid4())
+                    result, metrics = measure_batch(
+                        write_batch_to_clickhouse,
+                        buffer_records,
+                        extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+                    )
+                    write_pipeline_metrics(
+                        clickhouse_client,
+                        layer="bronze",
+                        batch_id=batch_id,
+                        batch_timestamp=datetime.now(timezone.utc),
+                        metrics=metrics,
+                    )
+
+                    # write_batch_to_clickhouse(buffer_records)
                     consumer.commit(asynchronous=False)
                     buffer_records.clear()
                     last_flush_time = time.monotonic()
@@ -136,7 +170,22 @@ def main():
         print("\nClickHouse consumer stopped by user.", flush=True)
     finally:
         if buffer_records:
-            write_batch_to_clickhouse(buffer_records)
+
+            batch_id = str(uuid.uuid4())
+            result, metrics = measure_batch(
+                write_batch_to_clickhouse,
+                buffer_records,
+                extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+            )
+            write_pipeline_metrics(
+                clickhouse_client,
+                layer="bronze",
+                batch_id=batch_id,
+                batch_timestamp=datetime.now(timezone.utc),
+                metrics=metrics,
+            )
+
+            # write_batch_to_clickhouse(buffer_records)
             consumer.commit(asynchronous=False)
         consumer.close()
 
