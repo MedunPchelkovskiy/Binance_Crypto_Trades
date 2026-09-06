@@ -14,8 +14,8 @@ def measure_batch(process_func, batch, extract_event_time_ms):
     metrics = {
         "batch_duration_ms": batch_duration_ms,
         "records_processed": len(batch),
-        "avg_processing_latency_ms": sum(latencies) / len(latencies),
-        "max_processing_latency_ms": max(latencies),
-        "p95_processing_latency_ms": sorted(latencies)[int(0.95 * (len(latencies) - 1))],
+        "avg_latency_ms": sum(latencies) / len(latencies),
+        "max_latency_ms": max(latencies),
+        "p95_latency": sorted(latencies)[int(0.95 * (len(latencies) - 1))],
     }
     return result, metrics
