@@ -11,7 +11,6 @@ the same Kafka topic, separate consumer group) — MinIO remains the
 source-of-truth raw archive, ClickHouse is a query-optimized sink.
 
 Manual offset commit — only after a successful insert into ClickHouse.
-
 If the insert fails, messages are re-consumed on next start (at-least-once).
 """
 
@@ -193,3 +192,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

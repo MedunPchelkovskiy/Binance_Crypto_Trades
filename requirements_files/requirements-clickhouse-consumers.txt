@@ -3,3 +3,4 @@ fastavro
 clickhouse-connect
 python-decouple
 ruff==0.12.10
+numpy
