@@ -1,23 +1,21 @@
 import time
-import numpy as np
 
-def measure_batch(process_func, records, extract_event_time_ms):
-    """
-    extract_event_time_ms: функция record -> event timestamp в ms
-    (различна за bronze vs silver, виж по-долу защо)
-    """
+
+def measure_batch(process_func, batch, extract_event_time_ms):
     start = time.perf_counter()
-    result = process_func(records)
+    result = process_func(batch)
     batch_duration_ms = int((time.perf_counter() - start) * 1000)
 
-    write_time_ms = int(time.time() * 1000)
-    latencies = [write_time_ms - extract_event_time_ms(r) for r in records]
+    latencies = [
+        receipt_time_ms - extract_event_time_ms(record)
+        for record, receipt_time_ms in batch
+    ]
 
     metrics = {
         "batch_duration_ms": batch_duration_ms,
-        "records_processed": len(records),
-        "avg_latency_ms": float(np.mean(latencies)),
-        "max_latency_ms": int(np.max(latencies)),
-        "p95_latency_ms": float(np.percentile(latencies, 95)),
+        "records_processed": len(batch),
+        "avg_processing_latency_ms": sum(latencies) / len(latencies),
+        "max_processing_latency_ms": max(latencies),
+        "p95_processing_latency_ms": sorted(latencies)[int(0.95 * (len(latencies) - 1))],
     }
     return result, metrics

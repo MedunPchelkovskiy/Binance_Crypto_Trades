@@ -87,7 +87,7 @@ def record_to_row(record):
 
 def write_batch_to_clickhouse(records):
     """Inserts a batch of records into ClickHouse."""
-    rows = [record_to_row(r) for r in records]
+    rows = [record_to_row(r) for r, _ in records]
     clickhouse_client.insert(CLICKHOUSE_TABLE, rows, column_names=COLUMN_NAMES)
     print(f"Inserted batch into ClickHouse: {len(rows)} rows", flush=True)
 
@@ -142,7 +142,8 @@ def main():
                 continue
 
             if record is not None:
-                buffer_records.append(record)
+                receipt_time_ms = int(time.time() * 1000)
+                buffer_records.append((record, receipt_time_ms))
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
                 if buffer_records:
