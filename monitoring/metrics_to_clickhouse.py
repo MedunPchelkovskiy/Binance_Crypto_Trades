@@ -3,7 +3,7 @@ ClickHouse persistence for pipeline monitoring metrics.
 """
 
 
-METRICS_TABLE = "pipeline_metrics"
+METRICS_TABLE = "silver_metrics"
 
 METRICS_COLUMNS = [
     "layer",
