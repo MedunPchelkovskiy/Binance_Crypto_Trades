@@ -32,12 +32,12 @@ from schemas.trade_schema import AVRO_TRADE_SCHEMA
 # --- Configuration ---
 
 TOPIC = "trade_streams_avro_dev"
-CONSUMER_GROUP = "clickhouse-silver-consumer-group-test"
+CONSUMER_GROUP = "clickhouse-silver-consumer-group"
 
 BATCH_SIZE = 500
 BATCH_TIMEOUT_SEC = 30
 
-CLICKHOUSE_TABLE = "binance_agg_trades_silver_test"
+CLICKHOUSE_TABLE = "binance_agg_trades_silver"
 
 COLUMN_NAMES = [
     "event_type",
@@ -77,7 +77,7 @@ parsed_schema = fastavro.parse_schema(_raw_schema)
 # --- Kafka consumer ---
 
 consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
     "group.id": CONSUMER_GROUP,
     "auto.offset.reset": "earliest",
     "enable.auto.commit": False,
@@ -89,7 +89,7 @@ consumer = Consumer(consumer_conf)
 # --- ClickHouse client ---
 
 clickhouse_client = clickhouse_connect.get_client(
-    host=config("CLICKHOUSE_HOST_DEV", default="localhost"),
+    host=config("CLICKHOUSE_HOST", default="localhost"),
     port=config("CLICKHOUSE_PORT", default=8123, cast=int),
     username=config("CLICKHOUSE_USER", default="default"),
     password=config("CLICKHOUSE_PASSWORD", default=""),
