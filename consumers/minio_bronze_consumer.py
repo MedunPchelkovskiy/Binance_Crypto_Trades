@@ -27,8 +27,6 @@ from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 
-from monitoring.metrics_measurement import measure_batch
-from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Конфигурация ---
@@ -36,8 +34,8 @@ from schemas.trade_schema import AVRO_TRADE_SCHEMA
 TOPIC = "trade_streams_avro_dev"
 CONSUMER_GROUP = "bronze-consumer-group"
 
-BATCH_SIZE = 500          # брой записи преди принудителен flush
-BATCH_TIMEOUT_SEC = 30    # максимално чакане преди flush, дори при непълен batch
+BATCH_SIZE = 500  # брой записи преди принудителен flush
+BATCH_TIMEOUT_SEC = 30  # максимално чакане преди flush, дори при непълен batch
 
 BUCKET_NAME = "trades-bronze-avro"
 
@@ -108,23 +106,21 @@ def main():
 
             if msg is None:
                 if buffer_records and timed_out:
-                    batch_id = str(uuid.uuid4())
-                    result, metrics = measure_batch(
-                        write_batch_to_clickhouse,
-                        buffer_records,
-                        extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
-                    )
-                    write_pipeline_metrics(
-                        s3_client,
-                        layer="bronze",
-                        batch_id=batch_id,
-                        batch_timestamp=datetime.now(timezone.utc),
-                        metrics=metrics,
-                    )
+                    # batch_id = str(uuid.uuid4())
+                    # result, metrics = measure_batch(
+                    #     write_batch_to_clickhouse,
+                    #     buffer_records,
+                    #     extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+                    # )
+                    # write_pipeline_metrics(
+                    #     s3_client,
+                    #     layer="bronze",
+                    #     batch_id=batch_id,
+                    #     batch_timestamp=datetime.now(timezone.utc),
+                    #     metrics=metrics,
+                    # )
 
-
-
-                    # write_batch_to_minio(buffer_records)
+                    write_batch_to_minio(buffer_records)
                     consumer.commit(asynchronous=False)
                     buffer_records.clear()
                     last_flush_time = time.monotonic()
