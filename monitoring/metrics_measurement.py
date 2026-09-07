@@ -1,7 +1,7 @@
 import time
 
 
-def measure_batch(process_func, batch, extract_event_time_ms):
+def measure_batch(batch_id, process_func, batch, extract_event_time_ms):
     start = time.perf_counter()
     result = process_func(batch)
     batch_duration_ms = int((time.perf_counter() - start) * 1000)

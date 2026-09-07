@@ -27,6 +27,8 @@ from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 
+from monitoring.metrics_measurement import measure_batch
+from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Конфигурация ---
@@ -106,7 +108,23 @@ def main():
 
             if msg is None:
                 if buffer_records and timed_out:
-                    write_batch_to_minio(buffer_records)
+                    batch_id = str(uuid.uuid4())
+                    result, metrics = measure_batch(
+                        write_batch_to_clickhouse,
+                        buffer_records,
+                        extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+                    )
+                    write_pipeline_metrics(
+                        s3_client,
+                        layer="bronze",
+                        batch_id=batch_id,
+                        batch_timestamp=datetime.now(timezone.utc),
+                        metrics=metrics,
+                    )
+
+
+
+                    # write_batch_to_minio(buffer_records)
                     consumer.commit(asynchronous=False)
                     buffer_records.clear()
                     last_flush_time = time.monotonic()

@@ -12,6 +12,7 @@ Manual offset commit — only after a successful ClickHouse insert.
 
 import json
 import time
+import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -23,18 +24,20 @@ from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 
+from monitoring.metrics_measurement import measure_batch
+from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 
 # --- Configuration ---
 
 TOPIC = "trade_streams_avro_dev"
-CONSUMER_GROUP = "clickhouse-silver-consumer-group"
+CONSUMER_GROUP = "clickhouse-silver-consumer-group-test"
 
 BATCH_SIZE = 500
 BATCH_TIMEOUT_SEC = 30
 
-CLICKHOUSE_TABLE = "binance_agg_trades_silver"
+CLICKHOUSE_TABLE = "binance_agg_trades_silver_test"
 
 COLUMN_NAMES = [
     "event_type",
@@ -74,7 +77,7 @@ parsed_schema = fastavro.parse_schema(_raw_schema)
 # --- Kafka consumer ---
 
 consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
     "group.id": CONSUMER_GROUP,
     "auto.offset.reset": "earliest",
     "enable.auto.commit": False,
@@ -86,7 +89,7 @@ consumer = Consumer(consumer_conf)
 # --- ClickHouse client ---
 
 clickhouse_client = clickhouse_connect.get_client(
-    host=config("CLICKHOUSE_HOST", default="localhost"),
+    host=config("CLICKHOUSE_HOST_DEV", default="localhost"),
     port=config("CLICKHOUSE_PORT", default=8123, cast=int),
     username=config("CLICKHOUSE_USER", default="default"),
     password=config("CLICKHOUSE_PASSWORD", default=""),
@@ -123,7 +126,7 @@ def record_to_row(record):
 def write_batch_to_clickhouse(records):
     """Inserts a batch of transformed records into Silver."""
 
-    rows = [record_to_row(r) for r in records]
+    rows = [record_to_row(r) for r, _ in records]
 
     clickhouse_client.insert(
         CLICKHOUSE_TABLE,
@@ -163,8 +166,23 @@ def main():
             if msg is None:
 
                 if buffer_records and timed_out:
+                    batch_id = str(uuid.uuid4())
+                    result, metrics = measure_batch(
+                        batch_id,
+                        write_batch_to_clickhouse,
+                        buffer_records,
+                        extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+                    )
+                    write_pipeline_metrics(
+                        clickhouse_client,
+                        layer="silver",
+                        batch_id=batch_id,
+                        batch_timestamp=datetime.now(timezone.utc),
+                        metrics=metrics,
+                    )
 
-                    write_batch_to_clickhouse(buffer_records)
+
+                    # write_batch_to_clickhouse(buffer_records)
 
                     consumer.commit(asynchronous=False)
 
@@ -197,13 +215,28 @@ def main():
                 continue
 
             if record is not None:
-                buffer_records.append(record)
+                receipt_time_ms = int(time.time() * 1000)
+                buffer_records.append((record, receipt_time_ms))
+                # buffer_records.append(record)
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
 
                 if buffer_records:
+                    batch_id = str(uuid.uuid4())
+                    result, metrics = measure_batch(batch_id,
+                        write_batch_to_clickhouse,
+                        buffer_records,
+                        extract_event_time_ms=lambda r: r["E"],  # bronze event time от Binance
+                    )
+                    write_pipeline_metrics(
+                        clickhouse_client,
+                        layer="silver",
+                        batch_id=batch_id,
+                        batch_timestamp=datetime.now(timezone.utc),
+                        metrics=metrics,
+                    )
 
-                    write_batch_to_clickhouse(buffer_records)
+                    # write_batch_to_clickhouse(buffer_records)
 
                     consumer.commit(asynchronous=False)
 
@@ -221,8 +254,22 @@ def main():
     finally:
 
         if buffer_records:
+            batch_id = str(uuid.uuid4())
+            result, metrics = measure_batch(
+                batch_id,
+                write_batch_to_clickhouse,
+                buffer_records,
+                extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+            )
+            write_pipeline_metrics(
+                clickhouse_client,
+                layer="silver",
+                batch_id=batch_id,
+                batch_timestamp=datetime.now(timezone.utc),
+                metrics=metrics,
+            )
 
-            write_batch_to_clickhouse(buffer_records)
+            # write_batch_to_clickhouse(buffer_records)
 
             consumer.commit(asynchronous=False)
 
