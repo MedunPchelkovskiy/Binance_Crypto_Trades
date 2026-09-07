@@ -181,9 +181,6 @@ def main():
                         metrics=metrics,
                     )
 
-
-                    # write_batch_to_clickhouse(buffer_records)
-
                     consumer.commit(asynchronous=False)
 
                     buffer_records.clear()
@@ -217,7 +214,6 @@ def main():
             if record is not None:
                 receipt_time_ms = int(time.time() * 1000)
                 buffer_records.append((record, receipt_time_ms))
-                # buffer_records.append(record)
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
 
@@ -236,7 +232,6 @@ def main():
                         metrics=metrics,
                     )
 
-                    # write_batch_to_clickhouse(buffer_records)
 
                     consumer.commit(asynchronous=False)
 
@@ -268,8 +263,6 @@ def main():
                 batch_timestamp=datetime.now(timezone.utc),
                 metrics=metrics,
             )
-
-            # write_batch_to_clickhouse(buffer_records)
 
             consumer.commit(asynchronous=False)
 
