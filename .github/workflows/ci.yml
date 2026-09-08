@@ -20,6 +20,7 @@ jobs:
       bronze_minio: ${{ steps.filter.outputs.bronze_minio }}
       bronze_clickhouse: ${{ steps.filter.outputs.bronze_clickhouse }}
       silver_clickhouse: ${{ steps.filter.outputs.silver_clickhouse }}
+      airflow: ${{ steps.filter.outputs.airflow }}
 
     steps:
       - name: Checkout code
@@ -63,6 +64,8 @@ jobs:
           echo "bronze_minio=${{ steps.filter.outputs.bronze_minio }}"
           echo "bronze_clickhouse=${{ steps.filter.outputs.bronze_clickhouse }}"
           echo "silver_clickhouse=${{ steps.filter.outputs.silver_clickhouse }}"
+          echo "airflow=${{ steps.filter.outputs.airflow }}"
+
 
   # ---- Service 1:
   build-my-producer:
@@ -248,7 +251,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # ---- Service 5:
+  build-airflow:
+    needs: changes
+    if: needs.changes.outputs.airflow == 'true'
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Airflow image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfiles/Dockerfile.airflow
+          push: true
+          tags: pchelkovskiy/airflow-streaming:1.0.0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
 
 
