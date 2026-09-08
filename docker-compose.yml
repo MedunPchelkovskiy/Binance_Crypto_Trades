@@ -179,16 +179,19 @@ services:
       - trades_stream_network
 
   airflow-postgres:
-    image: postgres:latest
+    image: postgres:18
     container_name: airflow-postgres
+
     environment:
       POSTGRES_DB: ${AIRFLOW_POSTGRES_DB}
       POSTGRES_USER: ${AIRFLOW_POSTGRES_USER}
       POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
+
     ports:
       - "5433:5432"
+
     volumes:
-      - airflow_postgres_data:/var/lib/postgresql/data
+      - airflow_postgres_data:/var/lib/postgresql
 
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${AIRFLOW_POSTGRES_USER} -d ${AIRFLOW_POSTGRES_DB}" ]
@@ -201,6 +204,7 @@ services:
 
     networks:
       - trades_stream_network
+
 
 
   airflow-init:
@@ -218,21 +222,24 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
         postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+
 
     volumes:
       - airflow_init_logs:/opt/airflow_init/logs
 
-    command: >
-      bash -c "
+    command:
+      - bash
+      - -c
+      - |
         airflow db migrate &&
-        airflow users create
-          --username          ${AIRFLOW_USERNAME}
-          --password          ${AIRFLOW_PASSWORD}
-          --firstname         ${AIRFLOW_FIRST_NAME}
-          --lastname          ${AIRFLOW_LAST_NAME}
-          --role              ${AIRFLOW_ROLE}
-          --email             ${AIRFLOW_EMAIL}
-      "
+        airflow users create \
+          --username "${AIRFLOW_USERNAME}" \
+          --password "${AIRFLOW_PASSWORD}" \
+          --firstname "${AIRFLOW_FIRST_NAME}" \
+          --lastname "${AIRFLOW_LAST_NAME}" \
+          --role "${AIRFLOW_ROLE}" \
+          --email "${AIRFLOW_EMAIL}"
 
     restart: "no"
 
@@ -248,6 +255,8 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
         postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+
 
 
     ports:
@@ -277,6 +286,8 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
         postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+
 
     volumes:
       - airflow_logs:/opt/airflow/logs
@@ -302,6 +313,8 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
         postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+
 
     volumes:
       - airflow_logs:/opt/airflow/logs
@@ -318,6 +331,33 @@ services:
     restart: unless-stopped
 
 
+  airflow-triggerer:
+    image: pchelkovskiy/airflow-streaming:1.0.0
+
+    container_name: airflow-triggerer
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+
+    volumes:
+      - airflow_logs:/opt/airflow/logs
+
+    command: triggerer
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+    networks:
+      - trades_stream_network
+
+    restart: unless-stopped
+
+
+
 
 
 
@@ -328,8 +368,8 @@ volumes:
   clickhouse_data:
   clickhouse_logs:
   airflow_logs:
-  airflow-postgres:
-  airflow-init:
+  airflow_postgres_data:
+  airflow_init_logs:
 
 networks:
   trades_stream_network:
