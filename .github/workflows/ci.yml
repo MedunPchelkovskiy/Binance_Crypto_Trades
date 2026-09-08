@@ -52,10 +52,9 @@ jobs:
               - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
               - 'requirements_files/requirements-clickhouse-consumers.txt'
             airflow:
-           airflow:
-            - 'airflow/dags/**'
-            - 'dockerfiles/Dockerfile.airflow'
-            - 'requirements_files/requirements-airflow.txt'
+              - 'airflow/dags/**'
+              - 'dockerfiles/Dockerfile.airflow'
+              - 'requirements_files/requirements-airflow.txt'
 
 
       - name: Debug filter output
