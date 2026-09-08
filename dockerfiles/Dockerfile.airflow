@@ -1,0 +1,11 @@
+FROM apache/airflow:3.3.1-python3.12
+
+COPY requirements_files/requirements-airflow.txt /requirements-airflow.txt
+
+RUN pip install --no-cache-dir \
+    -r /requirements-airflow.txt \
+    --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.1/constraints-3.12.txt"
+
+COPY --chown=airflow:root airflow/dags/ /opt/airflow/dags/
+
+

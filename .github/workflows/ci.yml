@@ -51,6 +51,12 @@ jobs:
               - 'consumers/click_house_silver_consumer.py'
               - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
               - 'requirements_files/requirements-clickhouse-consumers.txt'
+            airflow:
+           airflow:
+            - 'airflow/dags/**'
+            - 'dockerfiles/Dockerfile.airflow'
+            - 'requirements_files/requirements-airflow.txt'
+
 
       - name: Debug filter output
         run: |
@@ -99,7 +105,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.producer
+          file: ./dockerfiles/Dockerfile.airflow.producer
           push: true
           tags: pchelkovskiy/my-producer:latest
           cache-from: type=gha
@@ -145,7 +151,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.bronze_minio_consumer
+          file: ./dockerfiles/Dockerfile.airflow.bronze_minio_consumer
           push: true
           tags: pchelkovskiy/bronze-minio-consumer:latest
           cache-from: type=gha
@@ -191,7 +197,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.bronze_clickhouse_consumer
+          file: ./dockerfiles/Dockerfile.airflow.bronze_clickhouse_consumer
           push: true
           tags: pchelkovskiy/bronze-clickhouse-consumer:latest
           cache-from: type=gha
@@ -237,7 +243,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
+          file: ./dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer
           push: true
           tags: pchelkovskiy/silver-clickhouse-consumer:latest
           cache-from: type=gha
@@ -295,22 +301,22 @@ jobs:
 #          filters: |
 #            producer:
 #              - 'ingestion/**'
-#              - 'dockerfiles/Dockerfile.producer'
+#              - 'dockerfiles/Dockerfile.airflow.producer'
 #              - 'requirements_files/requirements.txt'
 #
 #            bronze_minio:
 #              - 'consumers/bronze_minio_consumer.py'
-#              - 'dockerfiles/Dockerfile.bronze_minio_consumer'
+#              - 'dockerfiles/Dockerfile.airflow.bronze_minio_consumer'
 #              - 'requirements_files/requirements-bronze.txt'
 #
 #            bronze_clickhouse:
 #              - 'consumers/bronze_clickhouse_consumer.py'
-#              - 'dockerfiles/Dockerfile.bronze_clickhouse_consumer'
+#              - 'dockerfiles/Dockerfile.airflow.bronze_clickhouse_consumer'
 #              - 'requirements_files/requirements-clickhouse-consumers.txt'
 #
 #            silver_clickhouse:
 #              - 'consumers/silver_clickhouse_consumer.py'
-#              - 'dockerfiles/Dockerfile.silver_clickhouse_consumer'
+#              - 'dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer'
 #              - 'requirements_files/requirements-clickhouse-consumers.txt'
 #
 #  # ---- Service 1:
@@ -348,7 +354,7 @@ jobs:
 #        uses: docker/build-push-action@v6
 #        with:
 #          context: .
-#          file: ./dockerfiles/Dockerfile.producer
+#          file: ./dockerfiles/Dockerfile.airflow.producer
 #          push: true
 #          tags: pchelkovskiy/my-producer:latest
 #          cache-from: type=gha
@@ -389,7 +395,7 @@ jobs:
 #        uses: docker/build-push-action@v6
 #        with:
 #          context: .
-#          file: ./dockerfiles/Dockerfile.bronze_minio_consumer
+#          file: ./dockerfiles/Dockerfile.airflow.bronze_minio_consumer
 #          push: true
 #          tags: pchelkovskiy/bronze-minio-consumer:latest
 #          cache-from: type=gha
@@ -430,7 +436,7 @@ jobs:
 #        uses: docker/build-push-action@v6
 #        with:
 #          context: .
-#          file: ./dockerfiles/Dockerfile.bronze_clickhouse_consumer
+#          file: ./dockerfiles/Dockerfile.airflow.bronze_clickhouse_consumer
 #          push: true
 #          tags: pchelkovskiy/bronze-clickhouse-consumer:latest
 #          cache-from: type=gha
@@ -471,7 +477,7 @@ jobs:
 #        uses: docker/build-push-action@v6
 #        with:
 #          context: .
-#          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
+#          file: ./dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer
 #          push: true
 #          tags: pchelkovskiy/silver-clickhouse-consumer:latest
 #          cache-from: type=gha

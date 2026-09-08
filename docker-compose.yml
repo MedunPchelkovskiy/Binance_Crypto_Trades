@@ -178,6 +178,151 @@ services:
     networks:
       - trades_stream_network
 
+  airflow-postgres:
+    image: postgres:latest
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_DB: ${AIRFLOW_POSTGRES_DB}
+      POSTGRES_USER: ${AIRFLOW_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${AIRFLOW_POSTGRES_USER} -d ${AIRFLOW_POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+    restart: unless-stopped
+
+    networks:
+      - trades_stream_network
+
+
+  airflow-init:
+    profiles:
+      - init
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+
+    volumes:
+      - airflow_init_logs:/opt/airflow_init/logs
+
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create
+          --username          ${AIRFLOW_USERNAME}
+          --password          ${AIRFLOW_PASSWORD}
+          --firstname         ${AIRFLOW_FIRST_NAME}
+          --lastname          ${AIRFLOW_LAST_NAME}
+          --role              ${AIRFLOW_ROLE}
+          --email             ${AIRFLOW_EMAIL}
+      "
+
+    restart: "no"
+
+    networks:
+      - trades_stream_network
+
+  airflow-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: airflow-api
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+
+
+    ports:
+      - "8082:8080"
+    volumes:
+      - airflow_logs:/opt/airflow/logs
+
+
+    command: api-server
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+    networks:
+      - trades_stream_network
+
+    restart: unless-stopped
+
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: airflow-scheduler
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+
+    volumes:
+      - airflow_logs:/opt/airflow/logs
+
+    command: scheduler
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+    networks:
+      - trades_stream_network
+
+    restart: unless-stopped
+
+
+  airflow-dag-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: airflow-dag-processor
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+
+    volumes:
+      - airflow_logs:/opt/airflow/logs
+
+    command: dag-processor
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+    networks:
+      - trades_stream_network
+
+    restart: unless-stopped
+
+
+
 
 
 volumes:
@@ -186,6 +331,9 @@ volumes:
   spark_checkpoints:
   clickhouse_data:
   clickhouse_logs:
+  airflow_logs:
+  airflow-postgres:
+  airflow-init:
 
 networks:
   trades_stream_network:
