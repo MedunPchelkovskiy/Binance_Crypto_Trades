@@ -207,9 +207,8 @@ services:
     profiles:
       - init
 
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: pchelkovskiy/airflow-streaming:1.0.0
+
 
     depends_on:
       airflow-postgres:
@@ -241,9 +240,8 @@ services:
       - trades_stream_network
 
   airflow-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: pchelkovskiy/airflow-streaming:1.0.0
+
     container_name: airflow-api
 
     environment:
@@ -271,9 +269,8 @@ services:
 
 
   airflow-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: pchelkovskiy/airflow-streaming:1.0.0
+
     container_name: airflow-scheduler
 
     environment:
@@ -297,9 +294,8 @@ services:
 
 
   airflow-dag-processor:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: pchelkovskiy/airflow-streaming:1.0.0
+
     container_name: airflow-dag-processor
 
     environment:
