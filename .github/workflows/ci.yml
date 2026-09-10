@@ -107,7 +107,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.airflow.producer
+          file: ./dockerfiles/Dockerfile.producer
           push: true
           tags: pchelkovskiy/my-producer:latest
           cache-from: type=gha
@@ -153,7 +153,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.airflow.bronze_minio_consumer
+          file: ./dockerfiles/Dockerfile.bronze_minio_consumer
           push: true
           tags: pchelkovskiy/bronze-minio-consumer:latest
           cache-from: type=gha
@@ -199,7 +199,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.airflow.bronze_clickhouse_consumer
+          file: ./dockerfiles/Dockerfile.bronze_clickhouse_consumer
           push: true
           tags: pchelkovskiy/bronze-clickhouse-consumer:latest
           cache-from: type=gha
@@ -245,7 +245,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer
+          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
           push: true
           tags: pchelkovskiy/silver-clickhouse-consumer:latest
           cache-from: type=gha
