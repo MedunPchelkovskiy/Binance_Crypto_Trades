@@ -18,7 +18,7 @@ from decimal import Decimal
 
 import clickhouse_connect
 import fastavro
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaException, Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
@@ -28,11 +28,11 @@ from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
-
 # --- Configuration ---
 
 TOPIC = "trade_streams_avro_dev"
 CONSUMER_GROUP = "clickhouse-silver-consumer-group"
+DLQ_TOPIC = "trade_streams_avro_dlq"
 
 BATCH_SIZE = 500
 BATCH_TIMEOUT_SEC = 30
@@ -53,7 +53,6 @@ COLUMN_NAMES = [
     "is_best_match",
 ]
 
-
 # --- Schema Registry + Avro deserializer ---
 
 schema_registry_conf = {
@@ -73,7 +72,6 @@ avro_deserializer = AvroDeserializer(
 _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
 parsed_schema = fastavro.parse_schema(_raw_schema)
 
-
 # --- Kafka consumer ---
 
 consumer_conf = {
@@ -83,8 +81,12 @@ consumer_conf = {
     "enable.auto.commit": False,
 }
 
-consumer = Consumer(consumer_conf)
+dlq_producer = Producer({
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
+    "acks": "all",
+})
 
+consumer = Consumer(consumer_conf)
 
 # --- ClickHouse client ---
 
@@ -140,8 +142,41 @@ def write_batch_to_clickhouse(records):
     )
 
 
-def main():
+def send_to_dlq(msg, error, error_type):
+    """Publishes failed Kafka messages to the DLQ."""
 
+    dlq_payload = {
+        "source_topic": msg.topic(),
+        "source_partition": msg.partition(),
+        "source_offset": msg.offset(),
+        "error_type": error_type,
+        "error_message": str(error),
+        "failed_at": datetime.now(timezone.utc).isoformat(),
+        "original_message": (
+            msg.value().hex()  # value is binary data, hex allowed to preserve original bites for replay
+            if msg.value() is not None
+            else None
+        ),
+    }
+
+    dlq_producer.produce(
+        topic=DLQ_TOPIC,
+        key=msg.key(),
+        value=json.dumps(dlq_payload).encode("utf-8"),
+    )
+
+    dlq_producer.flush()
+
+    print(
+        f"Message sent to DLQ: "
+        f"topic={msg.topic()}, "
+        f"partition={msg.partition()}, "
+        f"offset={msg.offset()}",
+        flush=True,
+    )
+
+
+def main():
     consumer.subscribe([TOPIC])
 
     buffer_records = []
@@ -159,8 +194,8 @@ def main():
             msg = consumer.poll(timeout=1.0)
 
             timed_out = (
-                time.monotonic() - last_flush_time
-                >= BATCH_TIMEOUT_SEC
+                    time.monotonic() - last_flush_time
+                    >= BATCH_TIMEOUT_SEC
             )
 
             if msg is None:
@@ -202,11 +237,23 @@ def main():
                     ),
                 )
 
+
             except Exception as e:
 
                 print(
-                    f"Deserialization ERROR (skip record): {e}",
+                    f"Deserialization ERROR: {e}",
                     flush=True,
+                )
+
+                send_to_dlq(
+                    msg,
+                    e,
+                    "avro_deserialization",
+                )
+
+                consumer.commit(
+                    message=msg,
+                    asynchronous=False,
                 )
 
                 continue
@@ -220,10 +267,11 @@ def main():
                 if buffer_records:
                     batch_id = str(uuid.uuid4())
                     result, metrics = measure_batch(batch_id,
-                        write_batch_to_clickhouse,
-                        buffer_records,
-                        extract_event_time_ms=lambda r: r["E"],  # bronze event time от Binance
-                    )
+                                                    write_batch_to_clickhouse,
+                                                    buffer_records,
+                                                    extract_event_time_ms=lambda r: r["E"],
+                                                    # bronze event time от Binance
+                                                    )
                     write_pipeline_metrics(
                         clickhouse_client,
                         layer="silver",
@@ -231,7 +279,6 @@ def main():
                         batch_timestamp=datetime.now(timezone.utc),
                         metrics=metrics,
                     )
-
 
                     consumer.commit(asynchronous=False)
 

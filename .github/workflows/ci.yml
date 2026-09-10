@@ -252,7 +252,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ---- Service 5:
-  build-airflow:
+  build-airflow-streaming:
     needs: changes
     if: needs.changes.outputs.airflow == 'true'
     runs-on: ubuntu-latest

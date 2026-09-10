@@ -173,3 +173,4 @@ terraform.tfvars
 # Secrets — never commit the real file, only the .example template
 .env.secrets
 streaming-etl-design-doc.md
+airflow_test_venv/
