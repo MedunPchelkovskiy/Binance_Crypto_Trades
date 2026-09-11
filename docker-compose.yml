@@ -24,7 +24,7 @@ services:
     environment:
       STREAM_URL: wss://stream.binance.com:9443/stream
       KAFKA_BROKER_ADDRESS: kafka:29092
-      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
     restart: unless-stopped
     depends_on:
       - kafka
@@ -357,6 +357,18 @@ services:
     restart: unless-stopped
 
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: trades-stream-prometheus
+    ports:
+      - "9093:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - trades_stream_network
+
+
 
 
 
@@ -370,6 +382,8 @@ volumes:
   airflow_logs:
   airflow_postgres_data:
   airflow_init_logs:
+  prometheus_data:
+
 
 networks:
   trades_stream_network:
