@@ -368,6 +368,8 @@ services:
     networks:
       - trades_stream_network
 
+    restart: unless-stopped
+
 
 
 

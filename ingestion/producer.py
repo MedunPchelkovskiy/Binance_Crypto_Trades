@@ -63,7 +63,6 @@ def on_trade_message(data):
 
     # НИВО 2: АВТОМАТИЧНА СЕРИАЛИЗАЦИЯ И ТРАНСПОРТ
     try:
-        start_time = time.monotonic()
         # Дефинираме контекста: за кой топик и че сериализираме СТОЙНОСТТА (Value) на съобщението
         context = SerializationContext('trade_streams_avro_dev', MessageField.VALUE)
         agg_trade_id = trade.agg_trade_id
