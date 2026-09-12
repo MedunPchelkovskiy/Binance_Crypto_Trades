@@ -93,7 +93,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    start_http_server(8003)
+    start_http_server(8003, addr="0.0.0.0.")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

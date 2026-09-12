@@ -21,6 +21,8 @@ services:
   producer:
     image: pchelkovskiy/my-producer
     container_name: binance-stream-producer
+    ports:
+      - "8003:8003"
     environment:
       STREAM_URL: wss://stream.binance.com:9443/stream
       KAFKA_BROKER_ADDRESS: kafka:29092
