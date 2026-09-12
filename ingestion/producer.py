@@ -64,14 +64,14 @@ def on_trade_message(data):
     # НИВО 2: АВТОМАТИЧНА СЕРИАЛИЗАЦИЯ И ТРАНСПОРТ
     try:
         # Дефинираме контекста: за кой топик и че сериализираме СТОЙНОСТТА (Value) на съобщението
-        context = SerializationContext('trade_streams_avro', MessageField.VALUE)
+        context = SerializationContext('trade_streams_avro_dev', MessageField.VALUE)
         agg_trade_id = trade.a
 
         serialized_value = avro_serializer(trade.model_dump(), context)
         pending_trades[agg_trade_id] = time.monotonic()
 
         producer.produce(
-            topic='trade_streams_avro',
+            topic='trade_streams_avro_dev',
             key=str(agg_trade_id),
             value=serialized_value,  # Подаваме контекста тук!
             callback=delivery_report,
