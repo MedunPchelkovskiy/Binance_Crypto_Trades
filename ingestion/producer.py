@@ -30,7 +30,7 @@ avro_serializer = AvroSerializer(
 
 # 3. Настройка на Confluent Kafka Producer
 producer_conf = {
-    'bootstrap.servers': config('KAFKA_BROKER_ADDRESS'),
+    'bootstrap.servers': config('KAFKA_BROKER_ADDRESS_DEV'),
     'acks': 'all'
 }
 producer = Producer(producer_conf)
@@ -64,14 +64,16 @@ def on_trade_message(data):
     # НИВО 2: АВТОМАТИЧНА СЕРИАЛИЗАЦИЯ И ТРАНСПОРТ
     try:
         # Дефинираме контекста: за кой топик и че сериализираме СТОЙНОСТТА (Value) на съобщението
-        context = SerializationContext('trade_streams_avro_dev', MessageField.VALUE)
-        agg_trade_id = trade.agg_trade_id
+        context = SerializationContext('trade_streams_avro_test', MessageField.VALUE)
+        agg_trade_id = trade.a
+
+        serialized_value = avro_serializer(trade.model_dump(), context)
         pending_trades[agg_trade_id] = time.monotonic()
 
         producer.produce(
-            topic='trade_streams_avro_dev',
+            topic='trade_streams_avro_test',
             key=str(agg_trade_id),
-            value=avro_serializer(trade.model_dump(), context),  # Подаваме контекста тук!
+            value=serialized_value,  # Подаваме контекста тук!
             callback=delivery_report,
         )
         producer.poll(0)
