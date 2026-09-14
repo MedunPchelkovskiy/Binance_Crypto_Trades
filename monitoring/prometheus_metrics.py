@@ -1,5 +1,7 @@
 from prometheus_client import Counter, Histogram, Gauge
 
+# ingestion metrics
+
 validation_errors_total = Counter(
     "validation_errors_total",
     "Total number of trade validation errors"
@@ -50,3 +52,30 @@ binance_message_rate = Gauge(
     "Current Binance messages per second"
 )
 
+# consumers metrics
+
+
+batch_to_minio_counter = Counter(
+    "batch_to_minio_counter",
+    "Total number of Minio batch transactions"
+)
+
+records_counter = Counter(
+    "records_to_minio_total",
+    "Total records written to MinIO"
+)
+
+last_batch_timestamp = Gauge(
+    "last_batch_to_minio_timestamp_seconds",
+    "Unix timestamp of the last batch written to MinIO"
+)
+
+batch_wait_seconds = Histogram(
+    "batch_wait_seconds",
+    "Time a batch waits in the buffer before being flushed"
+)
+
+batch_duration_seconds = Histogram(
+    "batch_duration_seconds",
+    "Time spent writing a batch to MinIO"
+)

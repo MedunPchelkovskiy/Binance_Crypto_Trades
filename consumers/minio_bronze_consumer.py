@@ -27,6 +27,8 @@ from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 
+from monitoring.prometheus_metrics import batch_to_minio_counter, last_batch_timestamp, records_counter, \
+    batch_wait_seconds, batch_duration_seconds
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Конфигурация ---
@@ -87,6 +89,11 @@ def write_batch_to_minio(records):
     )
 
     s3_client.put_object(Bucket=BUCKET_NAME, Key=key, Body=buffer.getvalue())
+
+    batch_to_minio_counter.inc()
+    last_batch_timestamp.set(now.timestamp())
+    records_counter.inc(len(records))
+
     print(f"Записан bronze batch: {key} ({len(records)} записа)", flush=True)
 
 
@@ -95,6 +102,7 @@ def main():
 
     buffer_records = []
     last_flush_time = time.monotonic()
+    batch_start_time = None
 
     print(f"Bronze consumer стартиран, слуша топик '{TOPIC}'...", flush=True)
 
@@ -139,11 +147,20 @@ def main():
                 continue
 
             if record is not None:
+                batch_start_time = time.monotonic()
                 buffer_records.append(record)
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
                 if buffer_records:
+                    batch_wait_seconds.observe(
+                        time.monotonic() - batch_start_time
+                    )
+
+                    start = time.monotonic()
                     write_batch_to_minio(buffer_records)
+                    batch_duration_seconds.observe(
+                        time.monotonic() - start
+                    )
                     consumer.commit(asynchronous=False)
                     buffer_records.clear()
                     last_flush_time = time.monotonic()
