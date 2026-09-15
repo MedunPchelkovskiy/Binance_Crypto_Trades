@@ -26,6 +26,7 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
+from prometheus_client import start_http_server
 
 from monitoring.prometheus_metrics import batch_to_minio_counter, last_batch_timestamp, records_counter, \
     batch_wait_seconds, batch_duration_seconds
@@ -34,16 +35,18 @@ from schemas.trade_schema import AVRO_TRADE_SCHEMA
 # --- Конфигурация ---
 
 TOPIC = "trade_streams_avro_dev"
-CONSUMER_GROUP = "bronze-consumer-group"
+CONSUMER_GROUP = "bronze-consumer-group-test"
 
 BATCH_SIZE = 500  # брой записи преди принудителен flush
 BATCH_TIMEOUT_SEC = 30  # максимално чакане преди flush, дори при непълен batch
 
-BUCKET_NAME = "trades-bronze-avro"
+# BUCKET_NAME = "trades-bronze-avro"
+BUCKET_NAME = "trades-raw"
 
 # --- Schema Registry + Avro deserializer ---
 
-schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
+# schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
+schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL_DEV", default="http://localhost:8081")}
 schema_registry_client = SchemaRegistryClient(schema_registry_conf)
 
 avro_deserializer = AvroDeserializer(
@@ -59,7 +62,7 @@ parsed_schema = fastavro.parse_schema(_raw_schema)
 # --- Kafka consumer ---
 
 consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
     "group.id": CONSUMER_GROUP,
     "auto.offset.reset": "earliest",
     "enable.auto.commit": False,  # ръчен commit, само след успешен write
@@ -70,7 +73,7 @@ consumer = Consumer(consumer_conf)
 
 s3_client = boto3.client(
     "s3",
-    endpoint_url=config("MINIO_ENDPOINT"),
+    endpoint_url=config("MINIO_ENDPOINT_DEV"),
     aws_access_key_id=config("MINIO_ACCESS_KEY"),
     aws_secret_access_key=config("MINIO_SECRET_KEY"),
 )
@@ -175,4 +178,5 @@ def main():
 
 
 if __name__ == "__main__":
+    start_http_server(8004, addr="0.0.0.0")
     main()
