@@ -23,3 +23,9 @@ scrape_configs:
 #    static_configs:
 #      - targets:
 #          - silver-consumer:8000
+#
+remote_write:
+  - url: https://prometheus-prod-58-prod-eu-central-0.grafana.net/api/prom/push
+    basic_auth:
+      username: '3398948'
+      password_file: /etc/prometheus/secrets/gc_token

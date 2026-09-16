@@ -362,14 +362,16 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: trades-stream-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
     ports:
       - "9093:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/secrets/gc_token:/etc/prometheus/secrets/gc_token:ro
       - prometheus_data:/prometheus
     networks:
       - trades_stream_network
-
     restart: unless-stopped
 
 

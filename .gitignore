@@ -175,3 +175,5 @@ terraform.tfvars
 .env.local
 streaming-etl-design-doc.md
 airflow_test_venv/
+monitoring/prometheus.yml
+monitoring/secrets/
