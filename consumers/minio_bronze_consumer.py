@@ -40,8 +40,7 @@ CONSUMER_GROUP = "bronze-consumer-group"
 BATCH_SIZE = 500  # брой записи преди принудителен flush
 BATCH_TIMEOUT_SEC = 30  # максимално чакане преди flush, дори при непълен batch
 
-# BUCKET_NAME = "trades-bronze-avro"
-BUCKET_NAME = "trades-raw"
+BUCKET_NAME = "trades-bronze-avro"
 
 # --- Schema Registry + Avro deserializer ---
 
