@@ -23,9 +23,11 @@ from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
+from prometheus_client import start_http_server
 
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
+from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, dlq_messages_total
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Configuration ---
@@ -128,6 +130,8 @@ def record_to_row(record):
 def write_batch_to_clickhouse(records):
     """Inserts a batch of transformed records into Silver."""
 
+    batch_insert_start = time.monotonic()
+
     rows = [record_to_row(r) for r, _ in records]
 
     clickhouse_client.insert(
@@ -136,6 +140,7 @@ def write_batch_to_clickhouse(records):
         column_names=COLUMN_NAMES,
     )
 
+    batch_clickhouse_insert_duration.observe(time.monotonic() - batch_insert_start)
     print(
         f"Inserted Silver batch into ClickHouse: {len(rows)} rows",
         flush=True,
@@ -166,6 +171,7 @@ def send_to_dlq(msg, error, error_type):
     )
 
     dlq_producer.flush()
+    dlq_messages_total.inc()
 
     print(
         f"Message sent to DLQ: "
@@ -193,10 +199,7 @@ def main():
 
             msg = consumer.poll(timeout=1.0)
 
-            timed_out = (
-                    time.monotonic() - last_flush_time
-                    >= BATCH_TIMEOUT_SEC
-            )
+            timed_out = (time.monotonic() - last_flush_time >= BATCH_TIMEOUT_SEC)
 
             if msg is None:
 
@@ -317,7 +320,7 @@ def main():
 
 
 if __name__ == "__main__":
+    start_http_server(8005, addr="0.0.0.0")
     main()
 
     # changes for rebuild initial
-

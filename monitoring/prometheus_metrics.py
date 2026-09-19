@@ -52,8 +52,9 @@ binance_message_rate = Gauge(
     "Current Binance messages per second"
 )
 
-# consumers metrics
+# consumers metrics:
 
+    # bronze minio consumer
 
 batch_to_minio_counter = Counter(
     "batch_to_minio_counter",
@@ -78,4 +79,16 @@ batch_wait_seconds = Histogram(
 batch_duration_seconds = Histogram(
     "batch_duration_seconds",
     "Time spent writing a batch to MinIO"
+)
+
+    # clickhouse silver consumer
+
+batch_clickhouse_insert_duration = Histogram(
+    "batch_clickhouse_insert_duration",
+    "Time spent writing a batch to ClickHouse"
+)
+
+dlq_messages_total = Counter(
+    "dlq_messages_total",
+    "Total number of DLQ messages"
 )
