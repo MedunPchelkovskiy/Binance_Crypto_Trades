@@ -84,7 +84,7 @@ consumer_conf = {
 }
 
 dlq_producer = Producer({
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS_DEV"),
+    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
     "acks": "all",
 })
 
