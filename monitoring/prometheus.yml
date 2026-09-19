@@ -19,6 +19,10 @@ scrape_configs:
           - bronze_minio_consumer:8004
 #           - host.docker.internal:8003
 
+  - job_name: 'silver-consumer'
+    static_configs:
+      - targets: [ 'silver-consumer:8005' ]
+
 #  - job_name: silver-consumer
 #    static_configs:
 #      - targets:
