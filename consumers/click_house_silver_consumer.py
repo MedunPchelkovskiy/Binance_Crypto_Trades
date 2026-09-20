@@ -27,7 +27,8 @@ from prometheus_client import start_http_server
 
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
-from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, dlq_messages_total
+from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, dlq_messages_total, \
+    clickhouse_records_counter, deserialization_errors_total, silver_buffer_size
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Configuration ---
@@ -139,7 +140,7 @@ def write_batch_to_clickhouse(records):
         rows,
         column_names=COLUMN_NAMES,
     )
-
+    clickhouse_records_counter.inc(len(rows))
     batch_clickhouse_insert_duration.observe(time.monotonic() - batch_insert_start)
     print(
         f"Inserted Silver batch into ClickHouse: {len(rows)} rows",
@@ -222,6 +223,7 @@ def main():
                     consumer.commit(asynchronous=False)
 
                     buffer_records.clear()
+                    silver_buffer_size.set(len(buffer_records))
 
                     last_flush_time = time.monotonic()
 
@@ -248,6 +250,7 @@ def main():
                     flush=True,
                 )
 
+                deserialization_errors_total.inc()
                 send_to_dlq(
                     msg,
                     e,
@@ -264,6 +267,7 @@ def main():
             if record is not None:
                 receipt_time_ms = int(time.time() * 1000)
                 buffer_records.append((record, receipt_time_ms))
+                silver_buffer_size.set(len(buffer_records))
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
 
@@ -286,6 +290,7 @@ def main():
                     consumer.commit(asynchronous=False)
 
                     buffer_records.clear()
+                    silver_buffer_size.set(len(buffer_records))
 
                     last_flush_time = time.monotonic()
 

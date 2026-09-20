@@ -84,6 +84,8 @@ services:
     networks:
       - trades_stream_network
 
+
+
   bronze_minio_consumer:
     image: pchelkovskiy/bronze-minio-consumer
     container_name: bronze-minio-consumer
@@ -100,7 +102,6 @@ services:
       - schema-registry
     networks:
       - trades_stream_network
-
 
   bronze_clickhouse_consumer:
     image: pchelkovskiy/bronze-clickhouse-consumer
@@ -180,6 +181,8 @@ services:
     networks:
       - trades_stream_network
 
+
+
   airflow-postgres:
     image: postgres:18
     container_name: airflow-postgres
@@ -206,8 +209,6 @@ services:
 
     networks:
       - trades_stream_network
-
-
 
   airflow-init:
     profiles:
@@ -278,7 +279,6 @@ services:
 
     restart: unless-stopped
 
-
   airflow-scheduler:
     image: pchelkovskiy/airflow-streaming:1.0.0
 
@@ -305,7 +305,6 @@ services:
 
     restart: unless-stopped
 
-
   airflow-dag-processor:
     image: pchelkovskiy/airflow-streaming:1.0.0
 
@@ -331,7 +330,6 @@ services:
       - trades_stream_network
 
     restart: unless-stopped
-
 
   airflow-triggerer:
     image: pchelkovskiy/airflow-streaming:1.0.0
@@ -362,8 +360,11 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: trades-stream-prometheus
+    stop_grace_period: 60s
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.wal-compression'
+      - '--storage.tsdb.path=/prometheus'
     ports:
       - "9093:9090"
     volumes:

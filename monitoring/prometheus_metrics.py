@@ -92,3 +92,19 @@ dlq_messages_total = Counter(
     "dlq_messages_total",
     "Total number of DLQ messages"
 )
+
+
+clickhouse_records_counter = Counter(
+    "records_to_clickhouse_total",
+    "Total records written to clickhouse"
+)
+
+deserialization_errors_total = Counter(
+    "deserialization_errors_total",
+    "Count of Avro deserialization failures in silver consumer"
+)
+
+silver_buffer_size = Gauge(
+    "silver_buffer_size",
+    "Current number of records waiting in buffer before flush"
+)
