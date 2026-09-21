@@ -68,6 +68,21 @@ services:
     networks:
       - trades_stream_network
 
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: trades-stream-kafka-exporter
+    command:
+      - '--kafka.server=kafka:29092'
+    ports:
+      - "9308:9308"
+    networks:
+      - trades_stream_network
+    depends_on:
+      - kafka
+    restart: unless-stopped
+
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: trades-stream-kafka-ui

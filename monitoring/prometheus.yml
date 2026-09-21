@@ -23,6 +23,13 @@ scrape_configs:
     static_configs:
       - targets: [ 'silver-consumer:8005' ]
 
+
+  - job_name: kafka-exporter
+    static_configs:
+      - targets:
+          - kafka-exporter:9308
+
+
 #  - job_name: silver-consumer
 #    static_configs:
 #      - targets:
@@ -33,3 +40,5 @@ remote_write:
     basic_auth:
       username: '3398948'
       password_file: /etc/prometheus/secrets/gc_token
+
+
