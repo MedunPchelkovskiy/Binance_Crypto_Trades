@@ -1,6 +1,6 @@
 # ruff: noqa: E741
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 
 class Trade(BaseModel):
@@ -13,8 +13,8 @@ class Trade(BaseModel):
     f: int
     l: int
     T: int
-    m: bool
-    M: bool
+    m: StrictBool
+    M: StrictBool
 
 
 """  
