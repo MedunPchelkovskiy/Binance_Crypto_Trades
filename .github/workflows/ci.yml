@@ -245,7 +245,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer
+          file: ./dockerfiles/Dockerfile.silver_clickhouse_consumer.json
           push: true
           tags: pchelkovskiy/silver-clickhouse-consumer:latest
           cache-from: type=gha
@@ -344,8 +344,8 @@ jobs:
 #              - 'requirements_files/requirements-clickhouse-consumers.txt'
 #
 #            silver_clickhouse:
-#              - 'consumers/silver_clickhouse_consumer.py'
-#              - 'dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer'
+#              - 'consumers/silver_clickhouse_consumer.json.py'
+#              - 'dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer.json'
 #              - 'requirements_files/requirements-clickhouse-consumers.txt'
 #
 #  # ---- Service 1:
@@ -506,7 +506,7 @@ jobs:
 #        uses: docker/build-push-action@v6
 #        with:
 #          context: .
-#          file: ./dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer
+#          file: ./dockerfiles/Dockerfile.airflow.silver_clickhouse_consumer.json
 #          push: true
 #          tags: pchelkovskiy/silver-clickhouse-consumer:latest
 #          cache-from: type=gha
