@@ -529,7 +529,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "OHLC/price trend panel (gold_price_ohlc_1m)",
+  "title": "OHLC/price trend dashboard (gold_price_ohlc_1m)",
   "uid": "adgnv8j",
-  "version": 11
+  "version": 12
 }
