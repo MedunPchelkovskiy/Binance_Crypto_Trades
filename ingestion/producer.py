@@ -2,9 +2,10 @@
 
 # ingestion/producer.py
 import asyncio
+import functools
 import time
 
-from confluent_kafka import Producer
+# from confluent_kafka import Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroSerializer
 from confluent_kafka.serialization import SerializationContext, MessageField
@@ -12,6 +13,7 @@ from decouple import config
 from prometheus_client import start_http_server
 
 from ingestion.binance_client import stream_agg_trades
+from ingestion.kafka_client import get_producer
 from ingestion.validation import Trade
 from monitoring.prometheus_metrics import validation_errors_total, serialization_errors_total, \
     kafka_delivery_errors_total, kafka_delivered_total, kafka_produce_latency_seconds
@@ -29,11 +31,11 @@ avro_serializer = AvroSerializer(
 )
 
 # 3. Настройка на Confluent Kafka Producer
-producer_conf = {
-    'bootstrap.servers': config('KAFKA_BROKER_ADDRESS'),
-    'acks': 'all'
-}
-producer = Producer(producer_conf)
+# producer_conf = {
+#     'bootstrap.servers': config('KAFKA_BROKER_ADDRESS'),
+#     'acks': 'all'
+# }
+# producer = Producer(producer_conf)
 pending_trades = {}
 
 
@@ -50,7 +52,7 @@ def delivery_report(err, msg):
     kafka_produce_latency_seconds.observe(latency)
 
 
-def on_trade_message(data):
+def on_trade_message(data, producer):
     print(data, flush=True)
 
     # НИВО 1: МИТНИЧАРЯТ (Pydantic Валидация)
@@ -84,9 +86,11 @@ def on_trade_message(data):
 
 
 async def main():
+    producer = get_producer()
     symbols = ["bnbusdt", "btcusdt", "ethusdt"]
+    callback = functools.partial(on_trade_message, producer=producer)
     try:
-        await stream_agg_trades(symbols, on_trade_message)
+        await stream_agg_trades(symbols, callback)
     finally:
         print("\nИзчистване на опашката и затваряне на продюсера...")
         producer.flush()
