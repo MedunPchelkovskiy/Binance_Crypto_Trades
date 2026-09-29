@@ -89,18 +89,6 @@ dlq_producer = Producer({
     "acks": "all",
 })
 
-
-# --- ClickHouse client ---
-
-# clickhouse_client = clickhouse_connect.get_client(
-#     host=config("CLICKHOUSE_HOST", default="localhost"),
-#     port=config("CLICKHOUSE_PORT", default=8123, cast=int),
-#     username=config("CLICKHOUSE_USER", default="default"),
-#     password=config("CLICKHOUSE_PASSWORD", default=""),
-#     database=config("CLICKHOUSE_DATABASE", default="trades"),  # TODO:delete after success in tests
-# )
-
-
 def ms_to_datetime(value):
     """Converts Unix milliseconds to UTC datetime."""
     return datetime.fromtimestamp(
@@ -182,7 +170,7 @@ def send_to_dlq(msg, error, error_type):
 
 
 def main():
-    clickhouse_client=get_clickhouse_client()
+    clickhouse_client = get_clickhouse_client()
     consumer = Consumer(consumer_conf)
     consumer.subscribe([TOPIC])
 
@@ -328,5 +316,3 @@ def main():
 if __name__ == "__main__":
     start_http_server(8005, addr="0.0.0.0")
     main()
-
-    # changes for rebuild initial
