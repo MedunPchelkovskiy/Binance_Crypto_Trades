@@ -1,9 +1,9 @@
 import time
 
 
-def measure_batch(batch_id, process_func, batch, extract_event_time_ms):
+def measure_batch(client, batch_id, process_func, batch, extract_event_time_ms):
     start = time.perf_counter()
-    result = process_func(batch)
+    result = process_func(client, batch)
     batch_duration_ms = int((time.perf_counter() - start) * 1000)
 
     latencies = [

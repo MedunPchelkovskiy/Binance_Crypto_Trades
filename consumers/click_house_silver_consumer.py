@@ -16,7 +16,6 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-import clickhouse_connect
 import fastavro
 from confluent_kafka import Consumer, KafkaException, Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
@@ -25,6 +24,7 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 from prometheus_client import start_http_server
 
+from consumers.clients import get_clickhouse_client
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, dlq_messages_total, \
@@ -89,17 +89,16 @@ dlq_producer = Producer({
     "acks": "all",
 })
 
-consumer = Consumer(consumer_conf)
 
 # --- ClickHouse client ---
 
-clickhouse_client = clickhouse_connect.get_client(
-    host=config("CLICKHOUSE_HOST", default="localhost"),
-    port=config("CLICKHOUSE_PORT", default=8123, cast=int),
-    username=config("CLICKHOUSE_USER", default="default"),
-    password=config("CLICKHOUSE_PASSWORD", default=""),
-    database=config("CLICKHOUSE_DATABASE", default="trades"),
-)
+# clickhouse_client = clickhouse_connect.get_client(
+#     host=config("CLICKHOUSE_HOST", default="localhost"),
+#     port=config("CLICKHOUSE_PORT", default=8123, cast=int),
+#     username=config("CLICKHOUSE_USER", default="default"),
+#     password=config("CLICKHOUSE_PASSWORD", default=""),
+#     database=config("CLICKHOUSE_DATABASE", default="trades"),  # TODO:delete after success in tests
+# )
 
 
 def ms_to_datetime(value):
@@ -128,11 +127,10 @@ def record_to_row(record):
     )
 
 
-def write_batch_to_clickhouse(records):
+def write_batch_to_clickhouse(clickhouse_client, records):
     """Inserts a batch of transformed records into Silver."""
 
     batch_insert_start = time.monotonic()
-
     rows = [record_to_row(r) for r, _ in records]
 
     clickhouse_client.insert(
@@ -184,6 +182,8 @@ def send_to_dlq(msg, error, error_type):
 
 
 def main():
+    clickhouse_client=get_clickhouse_client()
+    consumer = Consumer(consumer_conf)
     consumer.subscribe([TOPIC])
 
     buffer_records = []
@@ -207,6 +207,7 @@ def main():
                 if buffer_records and timed_out:
                     batch_id = str(uuid.uuid4())
                     result, metrics = measure_batch(
+                        clickhouse_client,
                         batch_id,
                         write_batch_to_clickhouse,
                         buffer_records,
