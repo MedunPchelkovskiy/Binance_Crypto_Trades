@@ -19,14 +19,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-import clickhouse_connect
 import fastavro
 from confluent_kafka import Consumer, KafkaException
-from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry.avro import AvroDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 
+from consumers.clients import get_clickhouse_client, get_avro_deserializer, get_consumer
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
@@ -34,7 +32,7 @@ from schemas.trade_schema import AVRO_TRADE_SCHEMA
 # --- Configuration ---
 
 TOPIC = "trade_streams_avro_dev"
-CONSUMER_GROUP = "clickhouse-consumer-group"
+
 
 BATCH_SIZE = 500  # number of records before a forced flush
 BATCH_TIMEOUT_SEC = 30  # max wait before flush, even if batch is not full
@@ -46,38 +44,40 @@ COLUMN_NAMES = ["e", "E", "s", "a", "p", "q", "f", "l", "T", "m", "M"]
 
 # --- Schema Registry + Avro deserializer ---
 
-schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
-schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-
-avro_deserializer = AvroDeserializer(
-    schema_registry_client=schema_registry_client,
-    schema_str=AVRO_TRADE_SCHEMA,
-)
+# schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
+# schema_registry_client = SchemaRegistryClient(schema_registry_conf)
+#
+# avro_deserializer = AvroDeserializer(
+#     schema_registry_client=schema_registry_client,
+#     schema_str=AVRO_TRADE_SCHEMA,
+# )
 
 # Kept for parity with minio_bronze_consumer.py, in case a fastavro-parsed schema
 # is needed elsewhere in this process (not required for ClickHouse insert).
-_raw_schema = json.loads(AVRO_TRADE_SCHEMA)
-parsed_schema = fastavro.parse_schema(_raw_schema)
+# _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
+# parsed_schema = fastavro.parse_schema(_raw_schema)
 
 # --- Kafka consumer ---
 
-consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-    "group.id": CONSUMER_GROUP,
-    "auto.offset.reset": "earliest",
-    "enable.auto.commit": False,  # manual commit, only after a successful insert
-}
-consumer = Consumer(consumer_conf)
+# consumer_conf = {
+#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
+#     "group.id": CONSUMER_GROUP,
+#     "auto.offset.reset": "earliest",
+#     "enable.auto.commit": False,  # manual commit, only after a successful insert
+# }
+
+
+# consumer = Consumer(consumer_conf)
 
 # --- ClickHouse client ---
 
-clickhouse_client = clickhouse_connect.get_client(
-    host=config("CLICKHOUSE_HOST", default="localhost"),
-    port=config("CLICKHOUSE_PORT", default=8123, cast=int),
-    username=config("CLICKHOUSE_USER", default="default"),
-    password=config("CLICKHOUSE_PASSWORD", default=""),
-    database=config("CLICKHOUSE_DATABASE", default="trades"),
-)
+# clickhouse_client = clickhouse_connect.get_client(
+#     host=config("CLICKHOUSE_HOST", default="localhost"),
+#     port=config("CLICKHOUSE_PORT", default=8123, cast=int),
+#     username=config("CLICKHOUSE_USER", default="default"),
+#     password=config("CLICKHOUSE_PASSWORD", default=""),
+#     database=config("CLICKHOUSE_DATABASE", default="trades"),
+# )
 
 
 def record_to_row(record):
@@ -85,7 +85,7 @@ def record_to_row(record):
     return tuple(record[col] for col in COLUMN_NAMES)
 
 
-def write_batch_to_clickhouse(records):
+def write_batch_to_clickhouse(clickhouse_client, records):
     """Inserts a batch of records into ClickHouse."""
     rows = [record_to_row(r) for r, _ in records]
     clickhouse_client.insert(CLICKHOUSE_TABLE, rows, column_names=COLUMN_NAMES)
@@ -93,7 +93,11 @@ def write_batch_to_clickhouse(records):
 
 
 def main():
+    clickhouse_client = get_clickhouse_client()
+    consumer_conf = get_consumer()
+    consumer = Consumer(consumer_conf)
     consumer.subscribe([TOPIC])
+    avro_deserializer = get_avro_deserializer()
 
     buffer_records = []
     last_flush_time = time.monotonic()
@@ -108,7 +112,6 @@ def main():
 
             if msg is None:
                 if buffer_records and timed_out:
-
                     batch_id = str(uuid.uuid4())
                     result, metrics = measure_batch(
                         write_batch_to_clickhouse,
@@ -147,7 +150,6 @@ def main():
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
                 if buffer_records:
-
                     batch_id = str(uuid.uuid4())
                     result, metrics = measure_batch(
                         write_batch_to_clickhouse,
@@ -171,7 +173,6 @@ def main():
         print("\nClickHouse consumer stopped by user.", flush=True)
     finally:
         if buffer_records:
-
             batch_id = str(uuid.uuid4())
             result, metrics = measure_batch(
                 write_batch_to_clickhouse,
@@ -193,5 +194,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
