@@ -1,18 +1,17 @@
 """
-Factory function for creating a ClickHouse client.
+Factory functions for external clients.
 
 Kept separate so that importing consumer modules for their transformation
 logic (e.g. record_to_row) never triggers a real connection attempt.
 """
 
 import clickhouse_connect
+from confluent_kafka import Consumer
 from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry._sync.avro import AvroDeserializer
+from confluent_kafka.schema_registry.avro import AvroDeserializer
 from decouple import config
 
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
-
-CONSUMER_GROUP = "clickhouse-consumer-group"
 
 
 def get_clickhouse_client():
@@ -27,8 +26,8 @@ def get_clickhouse_client():
 
 
 def get_avro_deserializer(registry_url=None):
-    schema_registry_conf = registry_url or config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")
-    schema_registry_client = SchemaRegistryClient(schema_registry_conf)
+    schema_registry_url = registry_url or config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")
+    schema_registry_client = SchemaRegistryClient({"url": schema_registry_url})
 
     avro_deserializer = AvroDeserializer(
         schema_registry_client=schema_registry_client,
@@ -38,11 +37,13 @@ def get_avro_deserializer(registry_url=None):
     return avro_deserializer
 
 
-def get_consumer(group_id, bootstrap_servers):
-    schema_registry_client = SchemaRegistryClient()
+def get_consumer(group_id, bootstrap_servers=None):
+    servers = bootstrap_servers or config("KAFKA_BROKER_ADDRESS")
     consumer_conf = {
-        "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-        "group.id": CONSUMER_GROUP,
+        "bootstrap.servers": servers,
+        "group.id": group_id,
         "auto.offset.reset": "earliest",
-        "enable.auto.commit": False,  # manual commit, only after a successful insert
+        "enable.auto.commit": False,  # manual commit, only after a successful write
     }
+    consumer = Consumer(consumer_conf)
+    return consumer

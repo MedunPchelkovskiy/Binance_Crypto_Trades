@@ -14,25 +14,21 @@ Manual offset commit — only after a successful insert into ClickHouse.
 If the insert fails, messages are re-consumed on next start (at-least-once).
 """
 
-import json
 import time
 import uuid
 from datetime import datetime, timezone
 
-import fastavro
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import KafkaException
 from confluent_kafka.serialization import SerializationContext, MessageField
-from decouple import config
 
 from consumers.clients import get_clickhouse_client, get_avro_deserializer, get_consumer
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
-from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Configuration ---
 
 TOPIC = "trade_streams_avro_dev"
-
+CONSUMER_GROUP = "clickhouse-consumer-group"
 
 BATCH_SIZE = 500  # number of records before a forced flush
 BATCH_TIMEOUT_SEC = 30  # max wait before flush, even if batch is not full
@@ -42,9 +38,10 @@ CLICKHOUSE_TABLE = "binance_agg_trades_bronze"
 # Column order must match the INSERT below and the table schema
 COLUMN_NAMES = ["e", "E", "s", "a", "p", "q", "f", "l", "T", "m", "M"]
 
+
 # --- Schema Registry + Avro deserializer ---
 
-# schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
+# schema_registry_url = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
 # schema_registry_client = SchemaRegistryClient(schema_registry_conf)
 #
 # avro_deserializer = AvroDeserializer(
@@ -94,8 +91,7 @@ def write_batch_to_clickhouse(clickhouse_client, records):
 
 def main():
     clickhouse_client = get_clickhouse_client()
-    consumer_conf = get_consumer()
-    consumer = Consumer(consumer_conf)
+    consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
     avro_deserializer = get_avro_deserializer()
 
@@ -114,6 +110,8 @@ def main():
                 if buffer_records and timed_out:
                     batch_id = str(uuid.uuid4())
                     result, metrics = measure_batch(
+                        clickhouse_client,
+                        batch_id,
                         write_batch_to_clickhouse,
                         buffer_records,
                         extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
@@ -152,6 +150,8 @@ def main():
                 if buffer_records:
                     batch_id = str(uuid.uuid4())
                     result, metrics = measure_batch(
+                        clickhouse_client,
+                        batch_id,
                         write_batch_to_clickhouse,
                         buffer_records,
                         extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
@@ -175,6 +175,8 @@ def main():
         if buffer_records:
             batch_id = str(uuid.uuid4())
             result, metrics = measure_batch(
+                clickhouse_client,
+                batch_id,
                 write_batch_to_clickhouse,
                 buffer_records,
                 extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
