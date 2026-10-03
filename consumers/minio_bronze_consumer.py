@@ -28,6 +28,7 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 from prometheus_client import start_http_server
 
+from consumers.clients import get_avro_deserializer, get_consumer, get_s3_client
 from monitoring.prometheus_metrics import batch_to_minio_counter, last_batch_timestamp, records_counter, \
     batch_wait_seconds, batch_duration_seconds
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
@@ -45,13 +46,13 @@ BUCKET_NAME = "trades-bronze-avro"
 # --- Schema Registry + Avro deserializer ---
 
 # schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
-schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
-schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-
-avro_deserializer = AvroDeserializer(
-    schema_registry_client=schema_registry_client,
-    schema_str=AVRO_TRADE_SCHEMA,
-)
+# schema_registry_conf = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
+# schema_registry_client = SchemaRegistryClient(schema_registry_conf)
+#
+# avro_deserializer = AvroDeserializer(
+#     schema_registry_client=schema_registry_client,
+#     schema_str=AVRO_TRADE_SCHEMA,
+# )
 
 # Fastavro очаква parsed schema (dict) — AVRO_TRADE_SCHEMA може да е dict или JSON string,
 # в зависимост от това как е дефинирана в schemas/trade_schema.py
@@ -60,25 +61,25 @@ parsed_schema = fastavro.parse_schema(_raw_schema)
 
 # --- Kafka consumer ---
 
-consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-    "group.id": CONSUMER_GROUP,
-    "auto.offset.reset": "earliest",
-    "enable.auto.commit": False,  # ръчен commit, само след успешен write
-}
-consumer = Consumer(consumer_conf)
+# consumer_conf = {
+#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
+#     "group.id": CONSUMER_GROUP,
+#     "auto.offset.reset": "earliest",
+#     "enable.auto.commit": False,  # ръчен commit, само след успешен write
+# }
+# consumer = Consumer(consumer_conf)
 
 # --- MinIO / S3 client ---
 
-s3_client = boto3.client(
-    "s3",
-    endpoint_url=config("MINIO_ENDPOINT"),
-    aws_access_key_id=config("MINIO_ACCESS_KEY"),
-    aws_secret_access_key=config("MINIO_SECRET_KEY"),
-)
+# s3_client = boto3.client(
+#     "s3",
+#     endpoint_url=config("MINIO_ENDPOINT"),
+#     aws_access_key_id=config("MINIO_ACCESS_KEY"),
+#     aws_secret_access_key=config("MINIO_SECRET_KEY"),
+# )
 
 
-def write_batch_to_minio(records):
+def write_batch_to_minio(s3_client, records):
     """Сериализира batch-а като Avro OCF в паметта и го качва в MinIO."""
     buffer = io.BytesIO()
     fastavro.writer(buffer, parsed_schema, records)
@@ -100,8 +101,10 @@ def write_batch_to_minio(records):
 
 
 def main():
+    consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
-
+    avro_deserializer = get_avro_deserializer()
+    s3_client = get_s3_client()
     buffer_records = []
     last_flush_time = time.monotonic()
     batch_start_time = None
@@ -130,7 +133,7 @@ def main():
                     #     metrics=metrics,
                     # )
 
-                    write_batch_to_minio(buffer_records)
+                    write_batch_to_minio(s3_client, buffer_records)
                     consumer.commit(asynchronous=False)
                     buffer_records.clear()
                     last_flush_time = time.monotonic()
@@ -149,7 +152,8 @@ def main():
                 continue
 
             if record is not None:
-                batch_start_time = time.monotonic()
+                if not buffer_records:  # first record of a new batch
+                    batch_start_time = time.monotonic()
                 buffer_records.append(record)
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
@@ -159,7 +163,7 @@ def main():
                     )
 
                     start = time.monotonic()
-                    write_batch_to_minio(buffer_records)
+                    write_batch_to_minio(s3_client, buffer_records)
                     batch_duration_seconds.observe(
                         time.monotonic() - start
                     )
@@ -171,7 +175,7 @@ def main():
         print("\nBronze consumer stopped from customer.", flush=True)
     finally:
         if buffer_records:
-            write_batch_to_minio(buffer_records)
+            write_batch_to_minio(s3_client, buffer_records)
             consumer.commit(asynchronous=False)
         consumer.close()
 

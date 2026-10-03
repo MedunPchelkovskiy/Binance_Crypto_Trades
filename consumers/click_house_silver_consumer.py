@@ -16,20 +16,16 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-import fastavro
-from confluent_kafka import Consumer, KafkaException, Producer
-from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry.avro import AvroDeserializer
+from confluent_kafka import KafkaException, Producer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from decouple import config
 from prometheus_client import start_http_server
 
-from consumers.clients import get_clickhouse_client
+from consumers.clients import get_clickhouse_client, get_consumer, get_avro_deserializer, get_producer
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, dlq_messages_total, \
     clickhouse_records_counter, deserialization_errors_total, silver_buffer_size
-from schemas.trade_schema import AVRO_TRADE_SCHEMA
 
 # --- Configuration ---
 
@@ -58,36 +54,37 @@ COLUMN_NAMES = [
 
 # --- Schema Registry + Avro deserializer ---
 
-schema_registry_conf = {
-    "url": config(
-        "SCHEMA_REGISTRY_URL",
-        default="http://localhost:8081",
-    )
-}
-
-schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-
-avro_deserializer = AvroDeserializer(
-    schema_registry_client=schema_registry_client,
-    schema_str=AVRO_TRADE_SCHEMA,
-)
-
-_raw_schema = json.loads(AVRO_TRADE_SCHEMA)
-parsed_schema = fastavro.parse_schema(_raw_schema)
+# schema_registry_conf = {
+#     "url": config(
+#         "SCHEMA_REGISTRY_URL",
+#         default="http://localhost:8081",
+#     )
+# }
+#
+# schema_registry_client = SchemaRegistryClient(schema_registry_conf)
+#
+# avro_deserializer = AvroDeserializer(
+#     schema_registry_client=schema_registry_client,
+#     schema_str=AVRO_TRADE_SCHEMA,
+# )
+#
+# _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
+# parsed_schema = fastavro.parse_schema(_raw_schema)
 
 # --- Kafka consumer ---
 
-consumer_conf = {
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-    "group.id": CONSUMER_GROUP,
-    "auto.offset.reset": "earliest",
-    "enable.auto.commit": False,
-}
+# consumer_conf = {
+#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
+#     "group.id": CONSUMER_GROUP,
+#     "auto.offset.reset": "earliest",
+#     "enable.auto.commit": False,
+# }
 
-dlq_producer = Producer({
-    "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-    "acks": "all",
-})
+# dlq_producer = Producer({
+#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
+#     "acks": "all",
+# })
+
 
 def ms_to_datetime(value):
     """Converts Unix milliseconds to UTC datetime."""
@@ -134,7 +131,7 @@ def write_batch_to_clickhouse(clickhouse_client, records):
     )
 
 
-def send_to_dlq(msg, error, error_type):
+def send_to_dlq(dlq_producer, msg, error, error_type):
     """Publishes failed Kafka messages to the DLQ."""
 
     dlq_payload = {
@@ -170,9 +167,11 @@ def send_to_dlq(msg, error, error_type):
 
 
 def main():
-    clickhouse_client = get_clickhouse_client()
-    consumer = Consumer(consumer_conf)
+    consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
+    avro_deserializer = get_avro_deserializer()
+    clickhouse_client = get_clickhouse_client()
+    dlq_producer = get_producer()
 
     buffer_records = []
     last_flush_time = time.monotonic()
@@ -241,6 +240,7 @@ def main():
 
                 deserialization_errors_total.inc()
                 send_to_dlq(
+                    dlq_producer,
                     msg,
                     e,
                     "avro_deserialization",
@@ -262,7 +262,8 @@ def main():
 
                 if buffer_records:
                     batch_id = str(uuid.uuid4())
-                    result, metrics = measure_batch(batch_id,
+                    result, metrics = measure_batch(clickhouse_client,
+                                                    batch_id,
                                                     write_batch_to_clickhouse,
                                                     buffer_records,
                                                     extract_event_time_ms=lambda r: r["E"],
@@ -295,6 +296,7 @@ def main():
         if buffer_records:
             batch_id = str(uuid.uuid4())
             result, metrics = measure_batch(
+                clickhouse_client,
                 batch_id,
                 write_batch_to_clickhouse,
                 buffer_records,

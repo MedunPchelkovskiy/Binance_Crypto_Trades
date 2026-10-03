@@ -4,9 +4,9 @@ Factory functions for external clients.
 Kept separate so that importing consumer modules for their transformation
 logic (e.g. record_to_row) never triggers a real connection attempt.
 """
-
+import boto3
 import clickhouse_connect
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
 from decouple import config
@@ -47,3 +47,21 @@ def get_consumer(group_id, bootstrap_servers=None):
     }
     consumer = Consumer(consumer_conf)
     return consumer
+
+
+def get_producer(bootstrap_servers=None):
+    """Creates and returns a new Kafka Producer, configured from env vars."""
+    producer_conf = {"bootstrap.servers": bootstrap_servers or config("KAFKA_BROKER_ADDRESS"),
+                     "acks": "all",
+                     }
+    return Producer(producer_conf)
+
+
+def get_s3_client(endpoint_url=None, access_key=None, secret_key=None):
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=endpoint_url or config("MINIO_ENDPOINT"),
+        aws_access_key_id=access_key or config("MINIO_ACCESS_KEY"),
+        aws_secret_access_key=secret_key or config("MINIO_SECRET_KEY"),
+    )
+    return s3_client
