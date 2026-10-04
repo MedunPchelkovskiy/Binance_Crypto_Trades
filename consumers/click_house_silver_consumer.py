@@ -16,9 +16,8 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from confluent_kafka import KafkaException, Producer
+from confluent_kafka import KafkaException
 from confluent_kafka.serialization import SerializationContext, MessageField
-from decouple import config
 from prometheus_client import start_http_server
 
 from consumers.clients import get_clickhouse_client, get_consumer, get_avro_deserializer, get_producer
@@ -51,6 +50,7 @@ COLUMN_NAMES = [
     "is_buyer_maker",
     "is_best_match",
 ]
+
 
 # --- Schema Registry + Avro deserializer ---
 

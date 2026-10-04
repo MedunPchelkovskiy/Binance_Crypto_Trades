@@ -19,13 +19,9 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-import boto3
 import fastavro
-from confluent_kafka import Consumer, KafkaException
-from confluent_kafka.schema_registry import SchemaRegistryClient
-from confluent_kafka.schema_registry.avro import AvroDeserializer
+from confluent_kafka import KafkaException
 from confluent_kafka.serialization import SerializationContext, MessageField
-from decouple import config
 from prometheus_client import start_http_server
 
 from consumers.clients import get_avro_deserializer, get_consumer, get_s3_client
@@ -58,6 +54,7 @@ BUCKET_NAME = "trades-bronze-avro"
 # в зависимост от това как е дефинирана в schemas/trade_schema.py
 _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
 parsed_schema = fastavro.parse_schema(_raw_schema)
+
 
 # --- Kafka consumer ---
 
