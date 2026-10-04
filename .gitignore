@@ -173,7 +173,6 @@ terraform.tfvars
 # Secrets — never commit the real file, only the .example template
 .env.secrets
 .env.local
-streaming-etl-design-doc.md
 airflow_test_venv/
 monitoring/prometheus.yml
 monitoring/secrets/
