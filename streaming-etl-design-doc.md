@@ -365,7 +365,7 @@ streaming-etl-portfolio/
 | 3.6 | DAG: DLQ monitoring task — брои съобщения в DLQ topic, alert при рязък ръст | Изкуствено пуснато невалидно съобщение вдига брояча, видимо в Grafana |
 | 3.7 | Prometheus: consumer lag exporter (Kafka), поотделно за bronze и silver consumer group → Grafana panels | И двата панела показват реален lag, растат при изкуствено забавяне на съответния consumer |
 | 3.8 | Grafana alert + Alertmanager rule при lag над праг (за всеки consumer group поотделно) | Изкуствен lag spike на bronze ИЛИ silver тригва съответен alert |
-| 3.9 | DAG: `gap_detection_dag` (ADR-012) — периодична проверка per symbol за необичайно дълга "тишина" спрямо обичайната честота, запис в `pipeline_metrics` | Изкуствено спряно subscription за 1 symbol се засича до следващия DAG run |
+| 3.9 | DAG: `gap_detection_dag` (ADR-012) — периодична проверка per symbol за необичайно дълга "тишина" спрямо обичайната честота, запис в `pipeline_metrics`"recovery е отделен модул, стартиран по график от Airflow" | Изкуствено спряно subscription за 1 symbol се засича до следващия DAG run |
 | 3.10 | DAG: `duplicate_rate_dag` (ADR-012) — периодично изчисление на % дублирани записи в silver, запис в `pipeline_metrics` | Изкуствено вкаран дубликат вдига метриката видимо |
 | 3.11 | Compaction effectiveness метрика — `compaction_dag` (3.2) логва брой файлове преди/след всеки run в `pipeline_metrics` | Графика показва намаляващ брой файлове след всеки run |
 | 3.12 | DAG run history summary — обобщение (success/failure/duration) на всички DAG-ове, запис в `pipeline_metrics` или отделна monitoring_gold таблица | Overview panel показва последните N run-а без нужда от Airflow UI |
