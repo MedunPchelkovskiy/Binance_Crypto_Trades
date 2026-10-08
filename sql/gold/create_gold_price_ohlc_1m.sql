@@ -11,7 +11,7 @@ CREATE TABLE trades.gold_price_ohlc_1m
 )
 ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMMDD(minute)
-ORDER BY (symbol, trades.gold_price_ohlc_1m);
+ORDER BY (symbol, minute);
 
 
 

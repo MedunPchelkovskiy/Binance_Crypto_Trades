@@ -2,10 +2,16 @@ from datetime import datetime
 
 from airflow.sdk import dag, task
 
+from backfill_logic import check_data as check_data_logic
+from consumers.clients import get_clickhouse_client
+
+SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]
+
+
 
 @task
 def check_data():
-    pass
+    return check_data_logic(get_clickhouse_client(), SYMBOLS)
 
 
 @task
