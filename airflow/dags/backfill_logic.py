@@ -1,6 +1,13 @@
 # Trades newer than this may still be in Kafka/consumer buffers,
 # so a "missing" id there is lag, not a real gap.
+import requests
+
 SAFETY_MARGIN_SEC = 300
+AGG_TRADES_URL = "https://api.binance.com/api/v3/aggTrades"
+REST_PAGE_LIMIT = 1000  # Binance maximum per request
+# Soft cap per DAG run (checked between pages). Results travel through XCom,
+# so a huge gap must be filled over several runs, not in one giant payload.
+MAX_TRADES_PER_RUN = 20_000
 
 
 def fetch_silver_bounds(client, symbols, margin_sec=SAFETY_MARGIN_SEC):
@@ -53,3 +60,105 @@ def check_data(client, symbols):
         fetch_silver_bounds(client, symbols),
         fetch_watermarks(client, symbols),
     )
+
+def fetch_existing_ids(client, symbol, from_id, to_id):
+    """Returns the agg_trade_ids that already exist in silver for the range."""
+    result = client.query(
+        """
+        SELECT DISTINCT agg_trade_id
+        FROM trades.binance_agg_trades_silver
+        WHERE symbol = {symbol:String}
+          AND agg_trade_id BETWEEN {from_id:Int64} AND {to_id:Int64}
+        ORDER BY agg_trade_id
+        """,
+        parameters={"symbol": symbol, "from_id": from_id, "to_id": to_id},
+    )
+    return [row[0] for row in result.result_rows]
+
+
+def find_missing_ranges(ids, from_id, to_id):
+    """Pure function: returns [(gap_from, gap_to)] of ids absent from `ids`.
+
+    Walks the sorted ids once and tracks the next expected id, so the
+    leading gap, inner gaps and trailing gap are all handled the same way.
+    """
+    gaps = []
+    expected = from_id
+    for i in sorted(set(ids)):
+        if i < from_id or i > to_id:
+            continue
+        if i > expected:
+            gaps.append((expected, i - 1))
+        expected = i + 1
+    if expected <= to_id:
+        gaps.append((expected, to_id))
+    return gaps
+
+
+def find_gaps(client, ranges):
+    gaps = []
+    for r in ranges:
+        ids = fetch_existing_ids(client, r["symbol"], r["from_id"], r["to_id"])
+        for gap_from, gap_to in find_missing_ranges(ids, r["from_id"], r["to_id"]):
+            gaps.append({"symbol": r["symbol"], "from_id": gap_from, "to_id": gap_to})
+    return gaps
+
+def to_trade(raw, symbol):
+    """Pure function: maps a REST aggTrades item to the stream message shape.
+
+    REST has no event time, so E = T (backfill latency metrics must be
+    filtered or marked later, as they are meaningless for these records).
+    """
+    return {
+        "e": "aggTrade",
+        "E": raw["T"],
+        "s": symbol,
+        "a": raw["a"],
+        "p": raw["p"],
+        "q": raw["q"],
+        "f": raw["f"],
+        "l": raw["l"],
+        "T": raw["T"],
+        "m": raw["m"],
+        "M": raw["M"],
+    }
+
+
+def fetch_gap_trades(symbol, from_id, to_id, http_get=requests.get,
+                     max_trades=MAX_TRADES_PER_RUN):
+    """Pages through REST aggTrades with fromId until to_id is reached."""
+    trades = []
+    cursor = from_id
+    while cursor <= to_id and len(trades) < max_trades:
+        # fromId cannot be combined with startTime/endTime in this endpoint,
+        # which is fine: our gaps are defined by id, not by time.
+        resp = http_get(
+            AGG_TRADES_URL,
+            params={"symbol": symbol, "fromId": cursor, "limit": REST_PAGE_LIMIT},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        batch = resp.json()
+        if not batch:
+            break  # nothing newer on the exchange
+        for raw in batch:
+            if raw["a"] > to_id:
+                return trades  # page overshoots the gap
+            trades.append(to_trade(raw, symbol))
+        cursor = batch[-1]["a"] + 1
+    return trades
+
+
+def get_binance_data(gaps, http_get=requests.get, max_trades=MAX_TRADES_PER_RUN):
+    """Fetches trades for gaps in order, sharing one budget across all gaps."""
+    trades = []
+    for gap in gaps:
+        remaining = max_trades - len(trades)
+        if remaining <= 0:
+            break  # leftover gaps are picked up by the next run
+        trades.extend(
+            fetch_gap_trades(gap["symbol"], gap["from_id"], gap["to_id"],
+                             http_get=http_get, max_trades=remaining)
+        )
+    return trades
+
