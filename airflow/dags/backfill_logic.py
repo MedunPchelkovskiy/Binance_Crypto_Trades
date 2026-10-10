@@ -1,5 +1,7 @@
 # Trades newer than this may still be in Kafka/consumer buffers,
 # so a "missing" id there is lag, not a real gap.
+import time
+
 import requests
 
 SAFETY_MARGIN_SEC = 300
@@ -8,6 +10,8 @@ REST_PAGE_LIMIT = 1000  # Binance maximum per request
 # Soft cap per DAG run (checked between pages). Results travel through XCom,
 # so a huge gap must be filled over several runs, not in one giant payload.
 MAX_TRADES_PER_RUN = 20_000
+STATE_TABLE = "trades.backfill_state"
+STATE_COLUMNS = ["symbol", "checked_up_to_id", "last_run_id", "gaps_found", "gaps_filled"]
 
 
 def fetch_silver_bounds(client, symbols, margin_sec=SAFETY_MARGIN_SEC):
@@ -230,3 +234,60 @@ def write_backfill(client, trades, producer, serialize, topic):
     new = filter_new_trades(client, trades)
     publish_trades(new, producer, serialize, topic)
     return {"published": len(new), "skipped_existing": len(trades) - len(new)}
+
+def count_ids(gaps, symbol):
+    return sum(g["to_id"] - g["from_id"] + 1 for g in gaps if g["symbol"] == symbol)
+
+
+def wait_for_silver(client, ranges, sleep=time.sleep, interval_sec=15, max_attempts=6):
+    """Polls find_gaps until silver has everything or attempts run out.
+
+    The silver consumer flushes every BATCH_TIMEOUT_SEC (30s), so checking
+    right after publish would report gaps that are merely in flight.
+    Total wait (6 x 15s) is deliberately longer than that flush interval.
+    """
+    gaps = find_gaps(client, ranges)
+    for _ in range(max_attempts - 1):
+        if not gaps:
+            break
+        sleep(interval_sec)
+        gaps = find_gaps(client, ranges)
+    return gaps
+
+
+def compute_new_watermarks(ranges, remaining):
+    """Pure function: {symbol: new_watermark}, only for ranges that made progress.
+
+    No gaps left -> watermark moves to the end of the range.
+    Gaps left -> it stops right before the first one, so it is retried next run.
+    """
+    result = {}
+    for r in ranges:
+        left = [g for g in remaining if g["symbol"] == r["symbol"]]
+        wm = min(g["from_id"] for g in left) - 1 if left else r["to_id"]
+        if wm >= r["from_id"]:  # otherwise no progress, nothing to write
+            result[r["symbol"]] = wm
+    return result
+
+
+def save_watermarks(client, watermarks, gaps, remaining, run_id):
+    rows = []
+    for symbol, wm in watermarks.items():
+        found = count_ids(gaps, symbol)
+        rows.append([symbol, wm, run_id, found, found - count_ids(remaining, symbol)])
+    if rows:
+        client.insert(STATE_TABLE, rows, column_names=STATE_COLUMNS)
+    return rows
+
+
+def verify_backfill(client, ranges, gaps, written, run_id,
+                    sleep=time.sleep, interval_sec=15, max_attempts=6):
+    if written["published"] > 0:
+        remaining = wait_for_silver(client, ranges, sleep, interval_sec, max_attempts)
+    else:
+        # Nothing was sent, so waiting would not change the result.
+        remaining = find_gaps(client, ranges)
+    watermarks = compute_new_watermarks(ranges, remaining)
+    save_watermarks(client, watermarks, gaps, remaining, run_id)
+    return {"watermarks": watermarks, "remaining_gaps": len(remaining)}
+

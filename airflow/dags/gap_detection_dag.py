@@ -15,6 +15,7 @@ SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]
 TOPIC = "trade_streams_avro_dev"
 
 
+
 @task
 def check_data():
     return check_data_logic(get_clickhouse_client(), SYMBOLS)
@@ -53,8 +54,11 @@ def write_backfill(trades):
 
 
 @task
-def verify_backfill(written):
-    pass
+def verify_backfill(ranges, gaps, written, run_id=None):
+    # run_id is injected by Airflow from the task context.
+    return backfill_logic.verify_backfill(
+        get_clickhouse_client(), ranges, gaps, written, run_id
+    )
 
 
 @dag(
@@ -69,7 +73,7 @@ def binance_agg_trades_backfill():
     download = get_binance_data(gaps)
     validated = validate_data(download)
     written = write_backfill(validated)
-    verify = verify_backfill(written)
+    verify = verify_backfill(ranges, gaps, written)
 
     # check >> gaps >> download >> validate >> write >> verify
 
