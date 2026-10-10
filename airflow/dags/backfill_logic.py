@@ -176,3 +176,57 @@ def validate_trades(trades, model):
         except Exception as e:
             invalid.append({"trade": trade, "error": str(e)})
     return valid, invalid
+
+def filter_new_trades(client, trades):
+    """Drops trades whose id already exists in silver.
+
+    Runs right before publishing: gold MVs use sum/count, so a duplicate
+    would be counted twice and cannot be fixed by ReplacingMergeTree.
+    """
+    by_symbol = {}
+    for t in trades:
+        by_symbol.setdefault(t["s"], []).append(t)
+
+    new = []
+    for symbol, items in by_symbol.items():
+        ids = [t["a"] for t in items]
+        existing = set(fetch_existing_ids(client, symbol, min(ids), max(ids)))
+        new.extend(t for t in items if t["a"] not in existing)
+    return new
+
+
+def publish_trades(trades, producer, serialize, topic, flush_timeout=30):
+    """Produces trades to Kafka and fails loudly if any delivery fails."""
+    failures = []
+
+    def on_delivery(err, msg):
+        if err is not None:
+            failures.append(str(err))
+
+    for t in trades:
+        kwargs = dict(
+            topic=topic,
+            key=str(t["a"]),  # same key as the stream producer
+            value=serialize(t),
+            headers=[("source", b"backfill")],  # lets us tell backfill from stream later
+            callback=on_delivery,
+        )
+        try:
+            producer.produce(**kwargs)
+        except BufferError:
+            producer.flush()  # local queue full: drain it, then retry once
+            producer.produce(**kwargs)
+        producer.poll(0)
+
+    remaining = producer.flush(flush_timeout)
+    if remaining or failures:
+        raise RuntimeError(
+            f"Backfill publish failed: {remaining} undelivered, "
+            f"{len(failures)} errors, first: {failures[:1]}"
+        )
+
+
+def write_backfill(client, trades, producer, serialize, topic):
+    new = filter_new_trades(client, trades)
+    publish_trades(new, producer, serialize, topic)
+    return {"published": len(new), "skipped_existing": len(trades) - len(new)}

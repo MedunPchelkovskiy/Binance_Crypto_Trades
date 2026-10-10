@@ -1,14 +1,18 @@
 import logging
 from datetime import datetime
 
+from confluent_kafka.serialization import SerializationContext, MessageField
+
 from airflow.dags import backfill_logic
 from airflow.sdk import dag, task
 from backfill_logic import check_data as check_data_logic
 from backfill_logic import find_gaps as find_gaps_logic
 from consumers.clients import get_clickhouse_client
+from ingestion.producer_clients import get_avro_serializer, get_producer
 from ingestion.validation import Trade
 
 SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]
+TOPIC = "trade_streams_avro_dev"
 
 
 @task
@@ -37,12 +41,19 @@ def validate_data(trades):
 
 
 @task
-def write_backfill(valid_):
-    pass
+def write_backfill(trades):
+    avro_serializer = get_avro_serializer()
+
+    def serialize(trade):
+        return avro_serializer(trade, SerializationContext(TOPIC, MessageField.VALUE))
+
+    return backfill_logic.write_backfill(
+        get_clickhouse_client(), trades, get_producer(), serialize, TOPIC
+    )
 
 
 @task
-def verify_backfill():
+def verify_backfill(written):
     pass
 
 
@@ -57,8 +68,8 @@ def binance_agg_trades_backfill():
     gaps = find_gaps(ranges)
     download = get_binance_data(gaps)
     validated = validate_data(download)
-    write = write_backfill(validated)
-    verify = verify_backfill(write)
+    written = write_backfill(validated)
+    verify = verify_backfill(written)
 
     # check >> gaps >> download >> validate >> write >> verify
 
