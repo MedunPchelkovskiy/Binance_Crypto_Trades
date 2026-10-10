@@ -162,3 +162,17 @@ def get_binance_data(gaps, http_get=requests.get, max_trades=MAX_TRADES_PER_RUN)
         )
     return trades
 
+
+def validate_trades(trades, model):
+    """Pure function: splits trades into (valid, invalid) using the stream's model.
+
+    Invalid trades are not fatal: their ids stay missing in silver, so
+    verify_backfill will see them as unfilled gaps instead of hiding them.
+    """
+    valid, invalid = [], []
+    for trade in trades:
+        try:
+            valid.append(model.model_validate(trade).model_dump())
+        except Exception as e:
+            invalid.append({"trade": trade, "error": str(e)})
+    return valid, invalid

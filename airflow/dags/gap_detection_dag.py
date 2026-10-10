@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from airflow.dags import backfill_logic
@@ -5,6 +6,7 @@ from airflow.sdk import dag, task
 from backfill_logic import check_data as check_data_logic
 from backfill_logic import find_gaps as find_gaps_logic
 from consumers.clients import get_clickhouse_client
+from ingestion.validation import Trade
 
 SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]
 
@@ -26,12 +28,16 @@ def get_binance_data(gaps):
 
 
 @task
-def validate_data():
-    pass
+def validate_data(trades):
+    valid, invalid = backfill_logic.validate_trades(trades, Trade)
+    if invalid:
+        # Log only a sample: full payloads would flood the Airflow logs.
+        logging.warning("Rejected %s trades, first: %s", len(invalid), invalid[0])
+    return valid
 
 
 @task
-def write_backfill():
+def write_backfill(valid_):
     pass
 
 
@@ -49,12 +55,12 @@ def verify_backfill():
 def binance_agg_trades_backfill():
     ranges = check_data()
     gaps = find_gaps(ranges)
-    download = get_binance_data()
-    validate = validate_data()
-    write = write_backfill()
-    verify = verify_backfill()
+    download = get_binance_data(gaps)
+    validated = validate_data(download)
+    write = write_backfill(validated)
+    verify = verify_backfill(write)
 
-    check >> gaps >> download >> validate >> write >> verify
+    # check >> gaps >> download >> validate >> write >> verify
 
 
 binance_agg_trades_backfill()
