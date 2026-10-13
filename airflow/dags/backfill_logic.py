@@ -291,3 +291,7 @@ def verify_backfill(client, ranges, gaps, written, run_id,
     save_watermarks(client, watermarks, gaps, remaining, run_id)
     return {"watermarks": watermarks, "remaining_gaps": len(remaining)}
 
+
+
+
+
