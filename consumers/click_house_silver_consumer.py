@@ -10,7 +10,6 @@ consumer group.
 Manual offset commit — only after a successful ClickHouse insert.
 """
 
-import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -21,10 +20,11 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 from prometheus_client import start_http_server
 
 from consumers.clients import get_clickhouse_client, get_consumer, get_avro_deserializer, get_producer
+from consumers.dlq import send_to_dlq
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
-from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, dlq_messages_total, \
-    clickhouse_records_counter, deserialization_errors_total, silver_buffer_size
+from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, clickhouse_records_counter, \
+    deserialization_errors_total, silver_buffer_size
 
 # --- Configuration ---
 
@@ -50,40 +50,6 @@ COLUMN_NAMES = [
     "is_buyer_maker",
     "is_best_match",
 ]
-
-
-# --- Schema Registry + Avro deserializer ---
-
-# schema_registry_conf = {
-#     "url": config(
-#         "SCHEMA_REGISTRY_URL",
-#         default="http://localhost:8081",
-#     )
-# }
-#
-# schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-#
-# avro_deserializer = AvroDeserializer(
-#     schema_registry_client=schema_registry_client,
-#     schema_str=AVRO_TRADE_SCHEMA,
-# )
-#
-# _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
-# parsed_schema = fastavro.parse_schema(_raw_schema)
-
-# --- Kafka consumer ---
-
-# consumer_conf = {
-#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-#     "group.id": CONSUMER_GROUP,
-#     "auto.offset.reset": "earliest",
-#     "enable.auto.commit": False,
-# }
-
-# dlq_producer = Producer({
-#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-#     "acks": "all",
-# })
 
 
 def ms_to_datetime(value):
@@ -127,41 +93,6 @@ def write_batch_to_clickhouse(clickhouse_client, records):
     batch_clickhouse_insert_duration.observe(time.monotonic() - batch_insert_start)
     print(
         f"Inserted Silver batch into ClickHouse: {len(rows)} rows",
-        flush=True,
-    )
-
-
-def send_to_dlq(dlq_producer, msg, error, error_type):
-    """Publishes failed Kafka messages to the DLQ."""
-
-    dlq_payload = {
-        "source_topic": msg.topic(),
-        "source_partition": msg.partition(),
-        "source_offset": msg.offset(),
-        "error_type": error_type,
-        "error_message": str(error),
-        "failed_at": datetime.now(timezone.utc).isoformat(),
-        "original_message": (
-            msg.value().hex()  # value is binary data, hex allowed to preserve original bites for replay
-            if msg.value() is not None
-            else None
-        ),
-    }
-
-    dlq_producer.produce(
-        topic=DLQ_TOPIC,
-        key=msg.key(),
-        value=json.dumps(dlq_payload).encode("utf-8"),
-    )
-
-    dlq_producer.flush()
-    dlq_messages_total.inc()
-
-    print(
-        f"Message sent to DLQ: "
-        f"topic={msg.topic()}, "
-        f"partition={msg.partition()}, "
-        f"offset={msg.offset()}",
         flush=True,
     )
 
@@ -240,10 +171,10 @@ def main():
 
                 deserialization_errors_total.inc()
                 send_to_dlq(
-                    dlq_producer,
                     msg,
                     e,
                     "avro_deserialization",
+                    CONSUMER_GROUP
                 )
 
                 consumer.commit(
