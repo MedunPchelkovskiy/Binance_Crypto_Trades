@@ -10,14 +10,15 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from confluent_kafka import Producer
 from decouple import config
 
+from consumers.clients import get_producer
 from monitoring.prometheus_metrics import dlq_messages_total
 
 logger = logging.getLogger(__name__)
 
 DLQ_TOPIC = config("DLQ_TOPIC", default="trade_streams_avro_dlq")
+DLQ_FLUSH_TIMEOUT_SEC = 10
 
 _dlq_producer = None
 
@@ -26,10 +27,7 @@ def _get_dlq_producer():
     """Lazy init, so importing this module never opens a Kafka connection."""
     global _dlq_producer
     if _dlq_producer is None:
-        _dlq_producer = Producer({
-            "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-            "acks": "all",
-        })
+        _dlq_producer = get_producer()
     return _dlq_producer
 
 
