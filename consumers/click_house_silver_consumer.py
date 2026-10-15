@@ -10,16 +10,17 @@ consumer group.
 Manual offset commit — only after a successful ClickHouse insert.
 """
 
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from confluent_kafka import KafkaException
+from confluent_kafka import KafkaException, TopicPartition
 from confluent_kafka.serialization import SerializationContext, MessageField
 from prometheus_client import start_http_server
 
-from consumers.clients import get_clickhouse_client, get_consumer, get_avro_deserializer, get_producer
+from consumers.clients import get_clickhouse_client, get_consumer, get_avro_deserializer
 from consumers.dlq import send_to_dlq
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
@@ -28,9 +29,10 @@ from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, clic
 
 # --- Configuration ---
 
+logger = logging.getLogger(__name__)
+
 TOPIC = "trade_streams_avro_dev"
 CONSUMER_GROUP = "clickhouse-silver-consumer-group"
-DLQ_TOPIC = "trade_streams_avro_dlq"
 
 BATCH_SIZE = 500
 BATCH_TIMEOUT_SEC = 30
@@ -102,9 +104,9 @@ def main():
     consumer.subscribe([TOPIC])
     avro_deserializer = get_avro_deserializer()
     clickhouse_client = get_clickhouse_client()
-    dlq_producer = get_producer()
 
     buffer_records = []
+    last_offsets = {}
     last_flush_time = time.monotonic()
 
     print(
@@ -131,17 +133,21 @@ def main():
                         buffer_records,
                         extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
                     )
-                    write_pipeline_metrics(
-                        clickhouse_client,
-                        layer="silver",
-                        batch_id=batch_id,
-                        batch_timestamp=datetime.now(timezone.utc),
-                        metrics=metrics,
-                    )
+                    try:
+                        write_pipeline_metrics(
+                            clickhouse_client,
+                            layer="silver",
+                            batch_id=batch_id,
+                            batch_timestamp=datetime.now(timezone.utc),
+                            metrics=metrics,
+                        )
+                    except Exception as e:
+                        logger.warning("Write pipeline metrics failed: %s", e, exc_info=True)
 
                     consumer.commit(asynchronous=False)
 
                     buffer_records.clear()
+                    last_offsets.clear()
                     silver_buffer_size.set(len(buffer_records))
 
                     last_flush_time = time.monotonic()
@@ -177,16 +183,14 @@ def main():
                     CONSUMER_GROUP
                 )
 
-                consumer.commit(
-                    message=msg,
-                    asynchronous=False,
-                )
-
                 continue
 
             if record is not None:
                 receipt_time_ms = int(time.time() * 1000)
                 buffer_records.append((record, receipt_time_ms))
+                last_offsets[msg.partition()] = TopicPartition(
+                    msg.topic(), msg.partition(), msg.offset() + 1
+                )
                 silver_buffer_size.set(len(buffer_records))
 
             if len(buffer_records) >= BATCH_SIZE or timed_out:
@@ -200,17 +204,21 @@ def main():
                                                     extract_event_time_ms=lambda r: r["E"],
                                                     # bronze event time от Binance
                                                     )
-                    write_pipeline_metrics(
-                        clickhouse_client,
-                        layer="silver",
-                        batch_id=batch_id,
-                        batch_timestamp=datetime.now(timezone.utc),
-                        metrics=metrics,
-                    )
+                    try:
+                        write_pipeline_metrics(
+                            clickhouse_client,
+                            layer="silver",
+                            batch_id=batch_id,
+                            batch_timestamp=datetime.now(timezone.utc),
+                            metrics=metrics,
+                        )
+                    except Exception as e:
+                        logger.warning("Write pipeline metrics failed: %s", e, exc_info=True)
 
                     consumer.commit(asynchronous=False)
 
                     buffer_records.clear()
+                    last_offsets.clear()
                     silver_buffer_size.set(len(buffer_records))
 
                     last_flush_time = time.monotonic()
@@ -224,28 +232,39 @@ def main():
 
     finally:
 
-        if buffer_records:
-            batch_id = str(uuid.uuid4())
-            result, metrics = measure_batch(
-                clickhouse_client,
-                batch_id,
-                write_batch_to_clickhouse,
-                buffer_records,
-                extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
-            )
-            write_pipeline_metrics(
-                clickhouse_client,
-                layer="silver",
-                batch_id=batch_id,
-                batch_timestamp=datetime.now(timezone.utc),
-                metrics=metrics,
-            )
+        try:
 
-            consumer.commit(asynchronous=False)
+            if buffer_records:
+                batch_id = str(uuid.uuid4())
+                result, metrics = measure_batch(
+                    clickhouse_client,
+                    batch_id,
+                    write_batch_to_clickhouse,
+                    buffer_records,
+                    extract_event_time_ms=lambda r: r["E"]  # bronze event time от Binance
+                )
 
-        consumer.close()
+                try:
+                    write_pipeline_metrics(
+                        clickhouse_client,
+                        layer="silver",
+                        batch_id=batch_id,
+                        batch_timestamp=datetime.now(timezone.utc),
+                        metrics=metrics,
+                    )
+
+                except Exception as e:
+
+                    logger.warning("Write pipeline metrics failed: %s", e, exc_info=True)
+                # Commit only up to the last buffered message, not the consumer
+                # position, which may already be past a message that failed DLQ.
+                consumer.commit(offsets=list(last_offsets.values()), asynchronous=False)
+
+        finally:
+            consumer.close()
 
 
 if __name__ == "__main__":
     start_http_server(8005, addr="0.0.0.0")
+    logging.basicConfig(level=logging.INFO)
     main()

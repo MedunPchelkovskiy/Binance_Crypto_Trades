@@ -22,6 +22,7 @@ from confluent_kafka import KafkaException
 from confluent_kafka.serialization import SerializationContext, MessageField
 
 from consumers.clients import get_clickhouse_client, get_avro_deserializer, get_consumer
+from consumers.dlq import send_to_dlq
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 
@@ -37,45 +38,6 @@ CLICKHOUSE_TABLE = "binance_agg_trades_bronze"
 
 # Column order must match the INSERT below and the table schema
 COLUMN_NAMES = ["e", "E", "s", "a", "p", "q", "f", "l", "T", "m", "M"]
-
-
-# --- Schema Registry + Avro deserializer ---
-
-# schema_registry_url = {"url": config("SCHEMA_REGISTRY_URL", default="http://localhost:8081")}
-# schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-#
-# avro_deserializer = AvroDeserializer(
-#     schema_registry_client=schema_registry_client,
-#     schema_str=AVRO_TRADE_SCHEMA,
-# )
-
-# Kept for parity with minio_bronze_consumer.py, in case a fastavro-parsed schema
-# is needed elsewhere in this process (not required for ClickHouse insert).
-# _raw_schema = json.loads(AVRO_TRADE_SCHEMA)
-# parsed_schema = fastavro.parse_schema(_raw_schema)
-
-# --- Kafka consumer ---
-
-# consumer_conf = {
-#     "bootstrap.servers": config("KAFKA_BROKER_ADDRESS"),
-#     "group.id": CONSUMER_GROUP,
-#     "auto.offset.reset": "earliest",
-#     "enable.auto.commit": False,  # manual commit, only after a successful insert
-# }
-
-
-# consumer = Consumer(consumer_conf)
-
-# --- ClickHouse client ---
-
-# clickhouse_client = clickhouse_connect.get_client(
-#     host=config("CLICKHOUSE_HOST", default="localhost"),
-#     port=config("CLICKHOUSE_PORT", default=8123, cast=int),
-#     username=config("CLICKHOUSE_USER", default="default"),
-#     password=config("CLICKHOUSE_PASSWORD", default=""),
-#     database=config("CLICKHOUSE_DATABASE", default="trades"),
-# )
-
 
 def record_to_row(record):
     """Maps a deserialized Avro record (dict) to a row tuple matching COLUMN_NAMES."""
@@ -140,6 +102,12 @@ def main():
                 )
             except Exception as e:
                 print(f"Deserialization ERROR (skip record): {e}", flush=True)
+                send_to_dlq(
+                    msg,
+                    e,
+                    "avro_deserialization",
+                    CONSUMER_GROUP
+                )
                 continue
 
             if record is not None:
