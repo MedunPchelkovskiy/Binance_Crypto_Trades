@@ -65,6 +65,7 @@ def check_data(client, symbols):
         fetch_watermarks(client, symbols),
     )
 
+
 def fetch_existing_ids(client, symbol, from_id, to_id):
     """Returns the agg_trade_ids that already exist in silver for the range."""
     result = client.query(
@@ -106,6 +107,7 @@ def find_gaps(client, ranges):
         for gap_from, gap_to in find_missing_ranges(ids, r["from_id"], r["to_id"]):
             gaps.append({"symbol": r["symbol"], "from_id": gap_from, "to_id": gap_to})
     return gaps
+
 
 def to_trade(raw, symbol):
     """Pure function: maps a REST aggTrades item to the stream message shape.
@@ -181,6 +183,7 @@ def validate_trades(trades, model):
             invalid.append({"trade": trade, "error": str(e)})
     return valid, invalid
 
+
 def filter_new_trades(client, trades):
     """Drops trades whose id already exists in silver.
 
@@ -234,6 +237,7 @@ def write_backfill(client, trades, producer, serialize, topic):
     new = filter_new_trades(client, trades)
     publish_trades(new, producer, serialize, topic)
     return {"published": len(new), "skipped_existing": len(trades) - len(new)}
+
 
 def count_ids(gaps, symbol):
     return sum(g["to_id"] - g["from_id"] + 1 for g in gaps if g["symbol"] == symbol)
@@ -292,6 +296,78 @@ def verify_backfill(client, ranges, gaps, written, run_id,
     return {"watermarks": watermarks, "remaining_gaps": len(remaining)}
 
 
+CHUNK_SIZE = 50_000  # max id span of one chunk
+MAX_RUNTIME_SEC = 2400  # keep below the DAG interval
 
+
+def split_into_chunks(gaps, chunk_size):
+    """Pure function: ascending, per-symbol chunks whose id span <= chunk_size.
+
+    Small gaps of one symbol are packed into one chunk; a gap larger than
+    chunk_size is cut. A chunk is the unit of publish -> verify -> watermark.
+    """
+    chunks = []
+    current = None
+    for gap in sorted(gaps, key=lambda g: (g["symbol"], g["from_id"])):
+        symbol, start = gap["symbol"], gap["from_id"]
+        while start <= gap["to_id"]:
+            if (current is None or current["symbol"] != symbol
+                    or start > current["from_id"] + chunk_size - 1):
+                current = {"symbol": symbol, "from_id": start,
+                           "to_id": start, "gaps": []}
+                chunks.append(current)
+            end = min(gap["to_id"], current["from_id"] + chunk_size - 1)
+            current["gaps"].append({"symbol": symbol, "from_id": start, "to_id": end})
+            current["to_id"] = end
+            start = end + 1
+    return chunks
+
+
+def fill_gaps(client, producer, serialize, topic, model, gaps, run_id, *,
+              http_get=requests.get, sleep=time.sleep, clock=time.monotonic,
+              chunk_size=CHUNK_SIZE, max_runtime_sec=MAX_RUNTIME_SEC,
+              verify_interval_sec=15, verify_attempts=6):
+    """Fetch -> validate -> publish -> verify -> move watermark, chunk by chunk.
+
+    Only counters are returned (small XCom payload); trades never leave
+    this function.
+    """
+    started = clock()
+    stats = {"chunks_done": 0, "published": 0, "rejected": 0,
+             "remaining_gaps": 0, "stopped_by_time": False}
+    blocked = set()  # symbol with an unfilled gap: later chunks must not move its watermark
+
+    for chunk in split_into_chunks(gaps, chunk_size):
+        symbol = chunk["symbol"]
+        if symbol in blocked:
+            continue
+        # Checked between chunks, never inside one.
+        if clock() - started >= max_runtime_sec:
+            stats["stopped_by_time"] = True
+            break
+
+        trades = get_binance_data(chunk["gaps"], http_get=http_get,
+                                  max_trades=chunk_size)
+        valid, invalid = validate_trades(trades, model)
+        publish_trades(valid, producer, serialize, topic)
+
+        window = [{"symbol": symbol, "from_id": chunk["from_id"], "to_id": chunk["to_id"]}]
+        if valid:
+            remaining = wait_for_silver(client, window, sleep,
+                                        verify_interval_sec, verify_attempts)
+        else:
+            remaining = find_gaps(client, window)
+
+        watermarks = compute_new_watermarks(window, remaining)
+        save_watermarks(client, watermarks, chunk["gaps"], remaining, run_id)
+
+        stats["chunks_done"] += 1
+        stats["published"] += len(valid)
+        stats["rejected"] += len(invalid)
+        stats["remaining_gaps"] += len(remaining)
+        if remaining:
+            blocked.add(symbol)
+
+    return stats
 
 
