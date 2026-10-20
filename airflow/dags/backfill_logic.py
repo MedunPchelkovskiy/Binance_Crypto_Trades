@@ -14,18 +14,18 @@ STATE_TABLE = "trades.backfill_state"
 STATE_COLUMNS = ["symbol", "checked_up_to_id", "last_run_id", "gaps_found", "gaps_filled"]
 
 
-def fetch_silver_bounds(client, symbols, margin_sec=SAFETY_MARGIN_SEC):
+def fetch_bronze_bounds(client, symbols, margin_sec=SAFETY_MARGIN_SEC):
     """Returns {symbol: (min_id, upper_id)} where upper_id ignores the newest trades."""
     result = client.query(
         """
-        SELECT symbol, min(agg_trade_id), maxIf(agg_trade_id, trade_time <= now64(3) - toIntervalSecond({margin:UInt32}))
-        FROM trades.binance_agg_trades_silver
-        WHERE symbol IN {symbols:Array(String)}
-        GROUP BY symbol
+        SELECT s, min(a), maxIf(a, T <= toUnixTimestamp64Milli(now64(3)) - {margin:UInt32} * 1000)
+        FROM trades.binance_agg_trades_bronze
+        WHERE s IN {symbols:Array(String)}
+        GROUP BY s
         """,
         parameters={"margin": margin_sec, "symbols": symbols},
     )
-    return {s: (mn, up) for s, mn, up in result.result_rows}
+    return {s: (min_id, max_id) for s, min_id, max_id in result.result_rows}
 
 
 def fetch_watermarks(client, symbols):
@@ -61,7 +61,7 @@ def check_data(client, symbols):
     symbols = [s.upper() for s in symbols]  # silver stores BNBUSDT, the stream uses bnbusdt
     return compute_check_ranges(
         symbols,
-        fetch_silver_bounds(client, symbols),
+        fetch_bronze_bounds(client, symbols),
         fetch_watermarks(client, symbols),
     )
 
