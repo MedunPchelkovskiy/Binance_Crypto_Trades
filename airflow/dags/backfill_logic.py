@@ -47,9 +47,9 @@ def compute_check_ranges(symbols, bounds, watermarks):
     ranges = []
     for symbol in symbols:
         if symbol not in bounds:
-            continue  # no data in silver yet
+            continue  # no data in bronze yet
         min_id, upper_id = bounds[symbol]
-        # First run: everything below the oldest id in silver is out of scope.
+        # First run: everything below the oldest id in bronze is out of scope.
         watermark = watermarks.get(symbol, min_id - 1)
         if upper_id <= watermark:
             continue  # nothing new beyond the safety margin
@@ -58,12 +58,13 @@ def compute_check_ranges(symbols, bounds, watermarks):
 
 
 def check_data(client, symbols):
-    symbols = [s.upper() for s in symbols]  # silver stores BNBUSDT, the stream uses bnbusdt
-    return compute_check_ranges(
+    symbols = [s.upper() for s in symbols]  # bronze stores BNBUSDT, the stream uses bnbusdt
+    checked_ranges = compute_check_ranges(
         symbols,
         fetch_bronze_bounds(client, symbols),
         fetch_watermarks(client, symbols),
     )
+    return checked_ranges
 
 
 def fetch_existing_ids(client, symbol, from_id, to_id):
@@ -71,7 +72,7 @@ def fetch_existing_ids(client, symbol, from_id, to_id):
     result = client.query(
         """
         SELECT DISTINCT agg_trade_id
-        FROM trades.binance_agg_trades_silver
+        FROM trades.binance_agg_trades_bronze
         WHERE symbol = {symbol:String}
           AND agg_trade_id BETWEEN {from_id:Int64} AND {to_id:Int64}
         ORDER BY agg_trade_id
