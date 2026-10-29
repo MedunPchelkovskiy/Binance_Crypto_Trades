@@ -1,6 +1,5 @@
-# tests/test_on_trade_message.py
+# tests/unit/test_on_trade_message.py
 from unittest.mock import MagicMock, patch
-import pytest
 
 from ingestion import producer as producer_module
 
@@ -32,38 +31,49 @@ def valid_trade_dict():
 
 # --- Normal case: valid trade goes through validation + produce ---
 def test_on_trade_message_valid_trade_calls_produce():
-    with patch.object(producer_module, "producer") as mock_producer, \
-         patch.object(producer_module, "avro_serializer", return_value=b"fake-bytes"):
+    mock_producer = MagicMock()
+    mock_serializer = MagicMock(return_value=b"fake-bytes")
 
-        data = FakeTradeData(valid_trade_dict())
-        producer_module.on_trade_message(data)
+    producer_module.on_trade_message(
+        FakeTradeData(valid_trade_dict()),
+        avro_serializer=mock_serializer,
+        producer=mock_producer,
+    )
 
-        mock_producer.produce.assert_called_once()
-        call_kwargs = mock_producer.produce.call_args.kwargs
-        assert call_kwargs["topic"] == "trade_streams_avro_dev"
-        assert call_kwargs["key"] == "857488061"
+    mock_producer.produce.assert_called_once()
+    call_kwargs = mock_producer.produce.call_args.kwargs
+    assert call_kwargs["topic"] == "trade_streams_avro_dev"
+    assert call_kwargs["key"] == "857488061"
 
 
 # --- Edge case: invalid trade data increments validation_errors_total, no produce call ---
 def test_on_trade_message_invalid_trade_skips_produce():
-    with patch.object(producer_module, "producer") as mock_producer, \
-         patch.object(producer_module, "validation_errors_total") as mock_counter:
+    mock_producer = MagicMock()
+    mock_serializer = MagicMock()
+    with patch.object(producer_module, "validation_errors_total") as mock_counter:
 
-        bad_data = FakeTradeData({"s": "BNBUSDT"})  # missing required fields
-        producer_module.on_trade_message(bad_data)
+        producer_module.on_trade_message(
+            FakeTradeData({"s": "BNBUSDT"}),  # missing required fields
+            avro_serializer=mock_serializer,
+            producer=mock_producer,
+        )
 
         mock_producer.produce.assert_not_called()
+        mock_serializer.assert_not_called()
         mock_counter.inc.assert_called_once()
 
 
 # --- Edge case: serialization failure increments serialization_errors_total, no produce call ---
 def test_on_trade_message_serialization_error_skips_produce():
-    with patch.object(producer_module, "producer") as mock_producer, \
-         patch.object(producer_module, "avro_serializer", side_effect=Exception("boom")), \
-         patch.object(producer_module, "serialization_errors_total") as mock_counter:
+    mock_producer = MagicMock()
+    mock_serializer = MagicMock(side_effect=Exception("boom"))
+    with patch.object(producer_module, "serialization_errors_total") as mock_counter:
 
-        data = FakeTradeData(valid_trade_dict())
-        producer_module.on_trade_message(data)
+        producer_module.on_trade_message(
+            FakeTradeData(valid_trade_dict()),
+            avro_serializer=mock_serializer,
+            producer=mock_producer,
+        )
 
         mock_producer.produce.assert_not_called()
         mock_counter.inc.assert_called_once()
@@ -71,28 +81,26 @@ def test_on_trade_message_serialization_error_skips_produce():
 
 # --- Edge case: pending_trades gets the correct key registered on success ---
 def test_on_trade_message_registers_pending_trade():
-    with patch.object(producer_module, "producer"), \
-         patch.object(producer_module, "avro_serializer", return_value=b"fake-bytes"):
+    producer_module.pending_trades.clear()
 
-        producer_module.pending_trades.clear()
-        data = FakeTradeData(valid_trade_dict())
-        producer_module.on_trade_message(data)
+    producer_module.on_trade_message(
+        FakeTradeData(valid_trade_dict()),
+        avro_serializer=MagicMock(return_value=b"fake-bytes"),
+        producer=MagicMock(),
+    )
 
-        assert 857488061 in producer_module.pending_trades
+    assert 857488061 in producer_module.pending_trades
 
 
-# --- Edge case: pending_trades does NOT leak an entry when serialization fails ---
-# NOTE: this test currently documents the KNOWN BUG discussed earlier
-# (pending_trades is set before avro_serializer is called).
-# Once fixed, this test should assert the entry is absent.
+# --- Regression: pending_trades must NOT leak an entry when serialization fails ---
 def test_on_trade_message_no_pending_leak_on_serialization_error():
-    with patch.object(producer_module, "producer"), \
-         patch.object(producer_module, "avro_serializer", side_effect=Exception("boom")):
+    producer_module.pending_trades.clear()
+    with patch.object(producer_module, "serialization_errors_total"):
 
-        producer_module.pending_trades.clear()
-        data = FakeTradeData(valid_trade_dict())
-        producer_module.on_trade_message(data)
+        producer_module.on_trade_message(
+            FakeTradeData(valid_trade_dict()),
+            avro_serializer=MagicMock(side_effect=Exception("boom")),
+            producer=MagicMock(),
+        )
 
-        # This assertion will currently FAIL until the ordering bug is fixed —
-        # keep it as a regression test once the fix is applied.
-        assert 857488061 not in producer_module.pending_trades
+    assert 857488061 not in producer_module.pending_trades
