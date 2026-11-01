@@ -116,7 +116,7 @@ jobs:
   # ---- Service 2:
   build-bronze-minio-consumer:
     needs: [changes, test]
-    if: needs.changes.outputs.producer == 'true' && github.event_name == 'push'
+    if: needs.changes.outputs.bronze_minio == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -162,7 +162,7 @@ jobs:
   # ---- Service 3:
   build-bronze-clickhouse-consumer:
     needs: [changes, test]
-    if: needs.changes.outputs.producer == 'true' && github.event_name == 'push'
+    if: needs.changes.outputs.bronze_clickhouse == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -208,7 +208,7 @@ jobs:
   # ---- Service 4:
   build-silver-clickhouse-consumer:
     needs: [changes, test]
-    if: needs.changes.outputs.producer == 'true' && github.event_name == 'push'
+    if: needs.changes.outputs.silver_clickhouse == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -254,7 +254,7 @@ jobs:
   # ---- Service 5:
   build-airflow-streaming:
     needs: [changes, test]
-    if: needs.changes.outputs.producer == 'true' && github.event_name == 'push'
+    if: needs.changes.outputs.airflow == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
