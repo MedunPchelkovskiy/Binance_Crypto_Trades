@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
 
   schema-registry:
@@ -13,6 +19,7 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
     depends_on:
       - kafka
+    logging: *default-logging
     restart: unless-stopped
     networks:
       - trades_stream_network
@@ -27,6 +34,9 @@ services:
       STREAM_URL: wss://stream.binance.com:9443/stream
       KAFKA_BROKER_ADDRESS: kafka:29092
       SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+    labels:
+      logging: "trades"
+    logging: *default-logging
     restart: unless-stopped
     depends_on:
       - kafka
@@ -63,6 +73,8 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
 
+    logging: *default-logging
+
     restart: unless-stopped
 
     networks:
@@ -80,6 +92,7 @@ services:
       - trades_stream_network
     depends_on:
       - kafka
+    logging: *default-logging
     restart: unless-stopped
 
 
@@ -93,6 +106,8 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
     depends_on:
       - kafka
+
+    logging: *default-logging
 
     restart: unless-stopped
 
@@ -110,6 +125,9 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       KAFKA_BROKER_ADDRESS: kafka:29092
       SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    labels:
+      logging: "trades"
+    logging: *default-logging
     restart: unless-stopped
     depends_on:
       - kafka
@@ -129,6 +147,9 @@ services:
       CLICKHOUSE_DATABASE: trades
       KAFKA_BROKER_ADDRESS: kafka:29092
       SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    labels:
+      logging: "trades"
+    logging: *default-logging
     restart: unless-stopped
     depends_on:
       - kafka
@@ -149,6 +170,9 @@ services:
       CLICKHOUSE_DATABASE: trades
       KAFKA_BROKER_ADDRESS: kafka:29092
       SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    labels:
+      logging: "trades"
+    logging: *default-logging
     restart: unless-stopped
     depends_on:
       - kafka
@@ -169,6 +193,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - minio_data:/data
+    logging: *default-logging
     restart: unless-stopped
     networks:
       - trades_stream_network
@@ -190,6 +215,8 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
+
+    logging: *default-logging
 
     restart: unless-stopped
 
@@ -219,6 +246,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 5s
+
+    logging: *default-logging
 
     restart: unless-stopped
 
@@ -259,6 +288,8 @@ services:
           --role "${AIRFLOW_ROLE}" \
           --email "${AIRFLOW_EMAIL}"
 
+    logging: *default-logging
+
     restart: "no"
 
     networks:
@@ -292,6 +323,8 @@ services:
     networks:
       - trades_stream_network
 
+    logging: *default-logging
+
     restart: unless-stopped
 
   airflow-scheduler:
@@ -317,6 +350,8 @@ services:
 
     networks:
       - trades_stream_network
+
+    logging: *default-logging
 
     restart: unless-stopped
 
@@ -344,6 +379,8 @@ services:
     networks:
       - trades_stream_network
 
+    logging: *default-logging
+
     restart: unless-stopped
 
   airflow-triggerer:
@@ -369,6 +406,8 @@ services:
     networks:
       - trades_stream_network
 
+    logging: *default-logging
+
     restart: unless-stopped
 
 
@@ -388,6 +427,7 @@ services:
       - prometheus_data:/prometheus
     networks:
       - trades_stream_network
+    logging: *default-logging
     restart: unless-stopped
 
 
@@ -402,6 +442,7 @@ services:
       - trades_loki_data:/loki
     networks:
       - trades_stream_network
+    logging: *default-logging
     restart: unless-stopped
 
   trades-promtail:
@@ -415,7 +456,26 @@ services:
       - trades_stream_network
     depends_on:
       - trades-loki
+    logging: *default-logging
     restart: unless-stopped
+
+#  # Grafana на проекта (отделена от общата на хоста). Loki се добавя като
+#  # data source с URL http://trades-loki:3100, Prometheus с http://prometheus:9090
+#  trades-grafana:
+#    image: grafana/grafana:11.5.2
+#    container_name: trades-grafana
+#    ports:
+#      - "3001:3000"             # хост 3001, за да не се бие със съществуващата Grafana
+#    environment:
+#      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+#    volumes:
+#      - trades_grafana_data:/var/lib/grafana
+#    networks:
+#      - trades_stream_network
+#    depends_on:
+#      - trades-loki
+#    logging: *default-logging
+#    restart: unless-stopped
 
 
 volumes:
@@ -429,6 +489,7 @@ volumes:
   airflow_init_logs:
   prometheus_data:
   trades_loki_data:
+  trades_grafana_data:
 
 networks:
   trades_stream_network:

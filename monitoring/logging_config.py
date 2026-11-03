@@ -2,7 +2,7 @@
 import logging
 import sys
 
-    from pythonjsonlogger.json import JsonFormatter
+from pythonjsonlogger.json import JsonFormatter
 
 
 def setup_logging(service_name, level=logging.INFO):
