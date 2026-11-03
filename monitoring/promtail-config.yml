@@ -1,0 +1,40 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Not persisted (no volume): after the promtail container is re-created
+# it may re-read recent logs. Acceptable for this project.
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://trades-loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: trades
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          # only containers that have `labels: logging: "trades"` in compose
+          - name: label
+            values: ["logging=trades"]
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: compose_service
+
+    pipeline_stages:
+      # Lines that are not JSON (e.g. old print() output) are kept as plain text
+      - json:
+          expressions:
+            level: level
+            service: service
+      # Only low-cardinality fields become labels.
+      # batch_id, symbol, rows etc. stay in the JSON line (filter with `| json`).
+      - labels:
+          level:
+          service:
