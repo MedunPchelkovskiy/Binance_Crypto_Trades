@@ -1,12 +1,10 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from confluent_kafka.serialization import SerializationContext, MessageField
 
-from airflow.dags import backfill_logic
 from airflow.sdk import dag, task
-from backfill_logic import check_data as check_data_logic
-from backfill_logic import find_gaps as find_gaps_logic
+import backfill_logic
 from consumers.clients import get_clickhouse_client
 from ingestion.producer_clients import get_avro_serializer, get_producer
 from ingestion.validation import Trade
@@ -15,50 +13,36 @@ SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]
 TOPIC = "trade_streams_avro_dev"
 
 
-
 @task
 def check_data():
-    return check_data_logic(get_clickhouse_client(), SYMBOLS)
+    return backfill_logic.check_data(get_clickhouse_client(), SYMBOLS)
 
 
 @task
 def find_gaps(ranges):
     # Thin wrapper: ranges come from check_data via XCom.
-    return find_gaps_logic(get_clickhouse_client(), ranges)
+    return backfill_logic.find_gaps(get_clickhouse_client(), ranges)
 
 
-@task
-def get_binance_data(gaps):
-    return backfill_logic.get_binance_data(gaps)
-
-
-@task
-def validate_data(trades):
-    valid, invalid = backfill_logic.validate_trades(trades, Trade)
-    if invalid:
-        # Log only a sample: full payloads would flood the Airflow logs.
-        logging.warning("Rejected %s trades, first: %s", len(invalid), invalid[0])
-    return valid
-
-
-@task
-def write_backfill(trades):
+# Hard stop at 45 min: the logic stops itself after 40 (MAX_RUNTIME_SEC),
+# this is the safety net before the next hourly run.
+@task(execution_timeout=timedelta(minutes=45))
+def fill_gaps(gaps, run_id=None):
+    # run_id is injected by Airflow from the task context.
     avro_serializer = get_avro_serializer()
 
     def serialize(trade):
         return avro_serializer(trade, SerializationContext(TOPIC, MessageField.VALUE))
 
-    return backfill_logic.write_backfill(
-        get_clickhouse_client(), trades, get_producer(), serialize, TOPIC
+    stats = backfill_logic.fill_gaps(
+        get_clickhouse_client(), get_producer(), serialize, TOPIC, Trade, gaps, run_id
     )
-
-
-@task
-def verify_backfill(ranges, gaps, written, run_id=None):
-    # run_id is injected by Airflow from the task context.
-    return backfill_logic.verify_backfill(
-        get_clickhouse_client(), ranges, gaps, written, run_id
-    )
+    if stats["rate_limited"]:
+        logging.warning(
+            "Binance rate limit hit, stopping. Retry-After: %s", stats["retry_after_sec"]
+        )
+    logging.info("Backfill stats: %s", stats)
+    return stats
 
 
 @dag(
@@ -66,16 +50,13 @@ def verify_backfill(ranges, gaps, written, run_id=None):
     schedule="@hourly",
     start_date=datetime(2026, 1, 1),
     catchup=False,
+    max_active_runs=1,
+    dagrun_timeout=timedelta(minutes=50),
 )
 def binance_agg_trades_backfill():
     ranges = check_data()
     gaps = find_gaps(ranges)
-    download = get_binance_data(gaps)
-    validated = validate_data(download)
-    written = write_backfill(validated)
-    verify = verify_backfill(ranges, gaps, written)
-
-    # check >> gaps >> download >> validate >> write >> verify
+    fill_gaps(gaps)
 
 
 binance_agg_trades_backfill()

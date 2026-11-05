@@ -12,6 +12,10 @@ REST_PAGE_LIMIT = 1000  # Binance maximum per request
 MAX_TRADES_PER_RUN = 20_000
 STATE_TABLE = "trades.backfill_state"
 STATE_COLUMNS = ["symbol", "checked_up_to_id", "last_run_id", "gaps_found", "gaps_filled"]
+WEIGHT_SOFT_LIMIT = 600  # ~половината от лимита от exchangeInfo
+WEIGHT_COOLDOWN_SEC = 60
+MIN_DELAY_SEC = 0.1
+RATE_LIMIT_CODES = (418, 429)
 
 
 def fetch_bronze_bounds(client, symbols, margin_sec=SAFETY_MARGIN_SEC):
@@ -68,7 +72,7 @@ def check_data(client, symbols):
 
 
 def fetch_existing_ids(client, symbol, from_id, to_id):
-    """Returns the agg_trade_ids that already exist in silver for the range."""
+    """Returns the agg_trade_ids that already exist in bronze for the range."""
     result = client.query(
         """
         SELECT DISTINCT a
@@ -131,20 +135,36 @@ def to_trade(raw, symbol):
     }
 
 
+def guarded_get(url, params, http_get=requests.get, sleep=time.sleep):
+    """GET към Binance с паузи. При 429/418 хвърля requests.HTTPError."""
+    resp = http_get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    used = int(resp.headers.get("X-MBX-USED-WEIGHT-1m", 0))
+    if used > WEIGHT_SOFT_LIMIT:
+        sleep(WEIGHT_COOLDOWN_SEC)  # близо до лимита: чакаме новия минутен прозорец
+    else:
+        sleep(MIN_DELAY_SEC)
+    return resp
+
+
+def is_rate_limited(error):
+    """True, ако HTTPError е 429/418 (Binance иска да спрем)."""
+    return error.response is not None and error.response.status_code in RATE_LIMIT_CODES
+
+
 def fetch_gap_trades(symbol, from_id, to_id, http_get=requests.get,
-                     max_trades=MAX_TRADES_PER_RUN):
+                     max_trades=MAX_TRADES_PER_RUN, sleep=time.sleep):
     """Pages through REST aggTrades with fromId until to_id is reached."""
     trades = []
     cursor = from_id
     while cursor <= to_id and len(trades) < max_trades:
         # fromId cannot be combined with startTime/endTime in this endpoint,
         # which is fine: our gaps are defined by id, not by time.
-        resp = http_get(
+        resp = guarded_get(
             AGG_TRADES_URL,
-            params={"symbol": symbol, "fromId": cursor, "limit": REST_PAGE_LIMIT},
-            timeout=10,
+            {"symbol": symbol, "fromId": cursor, "limit": REST_PAGE_LIMIT},
+            http_get=http_get, sleep=sleep,
         )
-        resp.raise_for_status()
         batch = resp.json()
         if not batch:
             break  # nothing newer on the exchange
@@ -156,7 +176,8 @@ def fetch_gap_trades(symbol, from_id, to_id, http_get=requests.get,
     return trades
 
 
-def get_binance_data(gaps, http_get=requests.get, max_trades=MAX_TRADES_PER_RUN):
+def get_binance_data(gaps, http_get=requests.get, max_trades=MAX_TRADES_PER_RUN,
+                     sleep=time.sleep):
     """Fetches trades for gaps in order, sharing one budget across all gaps."""
     trades = []
     for gap in gaps:
@@ -165,7 +186,7 @@ def get_binance_data(gaps, http_get=requests.get, max_trades=MAX_TRADES_PER_RUN)
             break  # leftover gaps are picked up by the next run
         trades.extend(
             fetch_gap_trades(gap["symbol"], gap["from_id"], gap["to_id"],
-                             http_get=http_get, max_trades=remaining)
+                             http_get=http_get, max_trades=remaining, sleep=sleep)
         )
     return trades
 
@@ -335,7 +356,8 @@ def fill_gaps(client, producer, serialize, topic, model, gaps, run_id, *,
     """
     started = clock()
     stats = {"chunks_done": 0, "published": 0, "rejected": 0,
-             "remaining_gaps": 0, "stopped_by_time": False}
+             "remaining_gaps": 0, "stopped_by_time": False,
+             "rate_limited": False, "retry_after_sec": None}
     blocked = set()  # symbol with an unfilled gap: later chunks must not move its watermark
 
     for chunk in split_into_chunks(gaps, chunk_size):
@@ -347,8 +369,15 @@ def fill_gaps(client, producer, serialize, topic, model, gaps, run_id, *,
             stats["stopped_by_time"] = True
             break
 
-        trades = get_binance_data(chunk["gaps"], http_get=http_get,
-                                  max_trades=chunk_size)
+        try:
+            trades = get_binance_data(chunk["gaps"], http_get=http_get,
+                                      max_trades=chunk_size, sleep=sleep)
+        except requests.HTTPError as e:
+            if not is_rate_limited(e):
+                raise
+            stats["rate_limited"] = True
+            stats["retry_after_sec"] = e.response.headers.get("Retry-After")
+            break
         valid, invalid = validate_trades(trades, model)
         publish_trades(valid, producer, serialize, topic)
 
@@ -370,5 +399,3 @@ def fill_gaps(client, producer, serialize, topic, model, gaps, run_id, *,
             blocked.add(symbol)
 
     return stats
-
-
