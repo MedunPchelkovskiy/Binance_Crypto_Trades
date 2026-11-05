@@ -71,11 +71,11 @@ def fetch_existing_ids(client, symbol, from_id, to_id):
     """Returns the agg_trade_ids that already exist in silver for the range."""
     result = client.query(
         """
-        SELECT DISTINCT agg_trade_id
+        SELECT DISTINCT a
         FROM trades.binance_agg_trades_bronze
-        WHERE symbol = {symbol:String}
-          AND agg_trade_id BETWEEN {from_id:Int64} AND {to_id:Int64}
-        ORDER BY agg_trade_id
+        WHERE s = {symbol:String}
+          AND a BETWEEN {from_id:Int64} AND {to_id:Int64}
+        ORDER BY a
         """,
         parameters={"symbol": symbol, "from_id": from_id, "to_id": to_id},
     )
