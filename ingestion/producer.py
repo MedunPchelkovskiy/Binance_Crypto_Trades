@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import logging
 import time
 
 from confluent_kafka.serialization import SerializationContext, MessageField
@@ -7,9 +8,12 @@ from prometheus_client import start_http_server
 
 from clients.binance_client import stream_agg_trades
 from clients.kafka_clients import get_producer, get_avro_serializer
+from monitoring.logging_config import setup_logging
 from ingestion.validation import Trade
 from monitoring.prometheus_metrics import validation_errors_total, serialization_errors_total, \
     kafka_delivery_errors_total, kafka_delivered_total, kafka_produce_latency_seconds
+
+logger =logging.getLogger("producer")
 
 pending_trades = {}
 
@@ -19,23 +23,23 @@ def delivery_report(err, msg):
     start_time = pending_trades.pop(agg_trade_id)
     if err is not None:
         kafka_delivery_errors_total.inc()
-        print(f"Delivery failed for record: {err}")
+        logger.error("Delivery failed for record %s:", err)
     else:
         kafka_delivered_total.inc()
-        print(f"Успешен запис! topic={msg.topic()}, partition={msg.partition()}, offset={msg.offset()}")
+        logger.debug(f"Успешен запис! topic={msg.topic()}, partition={msg.partition()}, offset={msg.offset()}")
     latency = time.monotonic() - start_time
     kafka_produce_latency_seconds.observe(latency)
 
 
 def on_trade_message(data, avro_serializer, producer):
-    print(data, flush=True)
+    logger.debug(f"On trade message data {data}")
 
     # НИВО 1: МИТНИЧАРЯТ (Pydantic Валидация)
     try:
         trade = Trade.model_validate(data.to_dict())
     except Exception as e:
         validation_errors_total.inc()
-        print(f"Validation ERROR: {e}")
+        logger.error(f"Validation ERROR: {e}")
         return
 
     # НИВО 2: АВТОМАТИЧНА СЕРИАЛИЗАЦИЯ И ТРАНСПОРТ
@@ -57,10 +61,11 @@ def on_trade_message(data, avro_serializer, producer):
 
     except Exception as e:
         serialization_errors_total.inc()
-        print(f"Serialisation/Produce ERROR: {e}")
+        logger.error(f"Serialisation/Produce ERROR: {e}")
 
 
 async def main():
+    setup_logging("producer")
     producer = get_producer()
     avro_serializer = get_avro_serializer()
     symbols = ["bnbusdt", "btcusdt", "ethusdt"]
@@ -68,7 +73,7 @@ async def main():
     try:
         await stream_agg_trades(symbols, callback)
     finally:
-        print("\nИзчистване на опашката и затваряне на продюсера...")
+        logger.info("\nИзчистване на опашката и затваряне на продюсера...")
         producer.flush()
 
 
@@ -77,4 +82,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nСкриптът е спрян от потребителя.")
+        logger.info("\nScript is stopped by customer.")
