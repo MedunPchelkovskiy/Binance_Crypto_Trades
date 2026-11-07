@@ -15,6 +15,7 @@ Manual offset commit — само след успешен write в MinIO. Ако
 
 import io
 import json
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -26,9 +27,12 @@ from prometheus_client import start_http_server
 
 from clients.kafka_clients import get_avro_deserializer, get_consumer
 from clients.s3_clients import get_s3_client
+from monitoring.logging_config import setup_logging
 from monitoring.prometheus_metrics import batch_to_minio_counter, last_batch_timestamp, records_counter, \
     batch_wait_seconds, batch_duration_seconds
 from schemas.trade_schema import AVRO_TRADE_SCHEMA
+
+logger = logging.getLogger(__name__)
 
 # --- Конфигурация ---
 
@@ -95,10 +99,11 @@ def write_batch_to_minio(s3_client, records):
     last_batch_timestamp.set(now.timestamp())
     records_counter.inc(len(records))
 
-    print(f"Записан bronze batch: {key} ({len(records)} записа)", flush=True)
+    logger.info("Bronze batch uploaded: %s (%s records)", key, len(records))
 
 
 def main():
+    setup_logging("bronze-minio-consumer")
     consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
     avro_deserializer = get_avro_deserializer()
@@ -107,7 +112,7 @@ def main():
     last_flush_time = time.monotonic()
     batch_start_time = None
 
-    print(f"Bronze consumer стартиран, слуша топик '{TOPIC}'...", flush=True)
+    logger.info(f"Bronze minio consumer starting, listening topic {TOPIC} ...")
 
     try:
         while True:
@@ -138,6 +143,7 @@ def main():
                 continue
 
             if msg.error():
+                logger.error(f"Message error: {msg.error()}")
                 raise KafkaException(msg.error())
 
             try:
@@ -146,7 +152,7 @@ def main():
                     SerializationContext(TOPIC, MessageField.VALUE),
                 )
             except Exception as e:
-                print(f"Deserialization ERROR (skip record): {e}", flush=True)
+                logger.error(f"Deserialization ERROR (skip record): {e}")
                 continue
 
             if record is not None:
@@ -170,7 +176,7 @@ def main():
                     last_flush_time = time.monotonic()
 
     except KeyboardInterrupt:
-        print("\nBronze consumer stopped from customer.", flush=True)
+        logger.error("\nBronze consumer stopped from customer.")
     finally:
         if buffer_records:
             write_batch_to_minio(s3_client, buffer_records)
@@ -180,4 +186,6 @@ def main():
 
 if __name__ == "__main__":
     start_http_server(8004, addr="0.0.0.0")
+    logger.info("start_http_server(port: 8004, addr='0.0.0.0'")
     main()
+
