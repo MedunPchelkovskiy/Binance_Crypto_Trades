@@ -1,1 +1,6 @@
 clickhouse-connect
+clickhouse-connect
+confluent-kafka[avro]
+python-decouple
+pydantic
+requests

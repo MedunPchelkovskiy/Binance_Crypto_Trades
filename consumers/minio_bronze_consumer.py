@@ -24,7 +24,8 @@ from confluent_kafka import KafkaException
 from confluent_kafka.serialization import SerializationContext, MessageField
 from prometheus_client import start_http_server
 
-from consumers.clients import get_avro_deserializer, get_consumer, get_s3_client
+from clients.kafka_clients import get_avro_deserializer, get_consumer
+from clients.s3_clients import get_s3_client
 from monitoring.prometheus_metrics import batch_to_minio_counter, last_batch_timestamp, records_counter, \
     batch_wait_seconds, batch_duration_seconds
 from schemas.trade_schema import AVRO_TRADE_SCHEMA

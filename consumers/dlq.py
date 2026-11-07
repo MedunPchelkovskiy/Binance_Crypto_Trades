@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from decouple import config
 
-from consumers.clients import get_producer
+from clients.kafka_clients import get_producer
 from monitoring.prometheus_metrics import dlq_messages_total
 
 logger = logging.getLogger(__name__)

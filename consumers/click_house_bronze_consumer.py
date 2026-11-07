@@ -21,7 +21,8 @@ from datetime import datetime, timezone
 from confluent_kafka import KafkaException
 from confluent_kafka.serialization import SerializationContext, MessageField
 
-from consumers.clients import get_clickhouse_client, get_avro_deserializer, get_consumer
+from clients.kafka_clients import get_avro_deserializer, get_consumer
+from clients.clickhouse_clients import get_clickhouse_client
 from consumers.dlq import send_to_dlq
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics

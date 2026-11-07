@@ -206,7 +206,7 @@ Docker/Docker Hub image workflow, GitHub Actions basics, Prometheus, Grafana, Pu
 ## 3. MVP Scope — какво влиза в v1
 
 ### ВЛИЗА:
-- [x] Binance WebSocket listener (Python, `ingestion/binance_client.py` + `ingestion/producer.py`) → пише в Kafka topic
+- [x] Binance WebSocket listener (Python, `clients/binance_client.py` + `ingestion/producer.py`) → пише в Kafka topic
 - [x] Pydantic/Avro валидация на входните съобщения (Schema Registry)
 - [ ] DLQ topic за невалидни съобщения (планирано, все още не имплементирано)
 - [x] `bronze_minio_consumer`: Kafka → Avro Object Container Files → MinIO (партиционирано по дата/час)

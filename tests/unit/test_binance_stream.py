@@ -2,7 +2,7 @@
 
 import asyncio
 
-from ingestion.binance_client import stream_agg_trades
+from clients.binance_client import stream_agg_trades
 
 
 message_count = 0

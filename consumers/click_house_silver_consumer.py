@@ -20,7 +20,8 @@ from confluent_kafka import KafkaException, TopicPartition
 from confluent_kafka.serialization import SerializationContext, MessageField
 from prometheus_client import start_http_server
 
-from consumers.clients import get_clickhouse_client, get_consumer, get_avro_deserializer
+from clients.kafka_clients import get_consumer, get_avro_deserializer
+from clients.clickhouse_clients import get_clickhouse_client
 from consumers.dlq import send_to_dlq
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics

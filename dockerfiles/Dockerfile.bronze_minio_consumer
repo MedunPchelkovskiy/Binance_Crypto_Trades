@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements-bronze.txt
 COPY consumers ./consumers
 COPY schemas ./schemas
 COPY monitoring ./monitoring
+COPY clients ./clients
 
 
 CMD ["python", "-m", "consumers.minio_bronze_consumer"]

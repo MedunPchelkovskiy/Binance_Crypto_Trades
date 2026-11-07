@@ -5,8 +5,8 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 
 from airflow.sdk import dag, task
 import backfill_logic
-from consumers.clients import get_clickhouse_client
-from ingestion.producer_clients import get_avro_serializer, get_producer
+from clients.clickhouse_clients import get_clickhouse_client
+from clients.kafka_clients import get_avro_serializer, get_producer
 from ingestion.validation import Trade
 
 SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]

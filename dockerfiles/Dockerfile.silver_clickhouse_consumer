@@ -9,5 +9,6 @@ RUN pip install --no-cache-dir -r requirements-clickhouse-consumers.txt
 COPY consumers ./consumers
 COPY schemas ./schemas
 COPY monitoring/ ./monitoring/
+COPY clients ./clients
 
 CMD ["python", "-m", "consumers.click_house_silver_consumer"]

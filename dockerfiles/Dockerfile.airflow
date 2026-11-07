@@ -7,5 +7,6 @@ RUN pip install --no-cache-dir \
     --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.1/constraints-3.12.txt"
 
 COPY --chown=airflow:root airflow/dags/ /opt/airflow/dags/
-
-
+COPY --chown=airflow:root clients/ /opt/airflow/clients/
+COPY --chown=airflow:root schemas/ /opt/airflow/schemas/
+COPY --chown=airflow:root ingestion/ /opt/airflow/ingestion/

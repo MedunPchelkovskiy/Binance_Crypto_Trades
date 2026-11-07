@@ -1,38 +1,16 @@
-### original file comented for testing,
-
-# ingestion/producer.py
 import asyncio
 import functools
 import time
 
-# from confluent_kafka import Producer
 from confluent_kafka.serialization import SerializationContext, MessageField
 from prometheus_client import start_http_server
 
-from ingestion.binance_client import stream_agg_trades
-from ingestion.producer_clients import get_producer, get_avro_serializer
+from clients.binance_client import stream_agg_trades
+from clients.kafka_clients import get_producer, get_avro_serializer
 from ingestion.validation import Trade
 from monitoring.prometheus_metrics import validation_errors_total, serialization_errors_total, \
     kafka_delivery_errors_total, kafka_delivered_total, kafka_produce_latency_seconds
 
-# ДИРЕКТЕН ИМПОРТ НА СХЕМАТА КАТО ПРОМЕНЛИВА
-
-# 1. Инициализация на Schema Registry Клиента
-# schema_registry_conf = {'url': config('SCHEMA_REGISTRY_URL', default='http://localhost:8081')}
-# schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-#
-# # 2. Подаваме импортирания стринг директно на сериализатора
-# avro_serializer = AvroSerializer(
-#     schema_registry_client=schema_registry_client,
-#     schema_str=AVRO_TRADE_SCHEMA
-# )
-
-# 3. Настройка на Confluent Kafka Producer
-# producer_conf = {
-#     'bootstrap.servers': config('KAFKA_BROKER_ADDRESS'),
-#     'acks': 'all'
-# }
-# producer = Producer(producer_conf)
 pending_trades = {}
 
 
@@ -67,7 +45,6 @@ def on_trade_message(data, avro_serializer, producer):
         agg_trade_id = trade.a
 
         serialized_value = avro_serializer(trade.model_dump(), context)
-
 
         producer.produce(
             topic='trade_streams_avro_dev',
