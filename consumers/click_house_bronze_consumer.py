@@ -13,7 +13,7 @@ source-of-truth raw archive, ClickHouse is a query-optimized sink.
 Manual offset commit — only after a successful insert into ClickHouse.
 If the insert fails, messages are re-consumed on next start (at-least-once).
 """
-
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -24,8 +24,11 @@ from confluent_kafka.serialization import SerializationContext, MessageField
 from clients.kafka_clients import get_avro_deserializer, get_consumer
 from clients.clickhouse_clients import get_clickhouse_client
 from consumers.dlq import send_to_dlq
+from monitoring.logging_config import setup_logging
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
+
+logger = logging.getLogger("clickhouse_bronze_consumer")
 
 # --- Configuration ---
 
@@ -49,10 +52,11 @@ def write_batch_to_clickhouse(clickhouse_client, records):
     """Inserts a batch of records into ClickHouse."""
     rows = [record_to_row(r) for r, _ in records]
     clickhouse_client.insert(CLICKHOUSE_TABLE, rows, column_names=COLUMN_NAMES)
-    print(f"Inserted batch into ClickHouse: {len(rows)} rows", flush=True)
+    logger.info(f"Inserted batch into ClickHouse: {len(rows)} rows")
 
 
 def main():
+    setup_logging("clickhouse_bronze_consumer")
     clickhouse_client = get_clickhouse_client()
     consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
@@ -61,7 +65,7 @@ def main():
     buffer_records = []
     last_flush_time = time.monotonic()
 
-    print(f"ClickHouse consumer started, listening on topic '{TOPIC}'...", flush=True)
+    logger.info(f"ClickHouse consumer started, listening on topic '{TOPIC}'...")
 
     try:
         while True:
@@ -102,7 +106,7 @@ def main():
                     SerializationContext(TOPIC, MessageField.VALUE),
                 )
             except Exception as e:
-                print(f"Deserialization ERROR (skip record): {e}", flush=True)
+                logger.error(f"Deserialization ERROR (skip record): {e}")
                 send_to_dlq(
                     msg,
                     e,
@@ -139,7 +143,7 @@ def main():
                     last_flush_time = time.monotonic()
 
     except KeyboardInterrupt:
-        print("\nClickHouse consumer stopped by user.", flush=True)
+        logging.warning("\nClickHouse consumer stopped by user.")
     finally:
         if buffer_records:
             batch_id = str(uuid.uuid4())
