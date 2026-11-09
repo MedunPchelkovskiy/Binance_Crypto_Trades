@@ -20,9 +20,10 @@ from confluent_kafka import KafkaException, TopicPartition
 from confluent_kafka.serialization import SerializationContext, MessageField
 from prometheus_client import start_http_server
 
-from clients.kafka_clients import get_consumer, get_avro_deserializer
 from clients.clickhouse_clients import get_clickhouse_client
+from clients.kafka_clients import get_consumer, get_avro_deserializer
 from consumers.dlq import send_to_dlq
+from monitoring.logging_config import setup_logging
 from monitoring.metrics_measurement import measure_batch
 from monitoring.metrics_to_clickhouse import write_pipeline_metrics
 from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, clickhouse_records_counter, \
@@ -30,7 +31,7 @@ from monitoring.prometheus_metrics import batch_clickhouse_insert_duration, clic
 
 # --- Configuration ---
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("clickhouse_silver_consumer")
 
 TOPIC = "trade_streams_avro_dev"
 CONSUMER_GROUP = "clickhouse-silver-consumer-group"
@@ -94,13 +95,13 @@ def write_batch_to_clickhouse(clickhouse_client, records):
     )
     clickhouse_records_counter.inc(len(rows))
     batch_clickhouse_insert_duration.observe(time.monotonic() - batch_insert_start)
-    print(
-        f"Inserted Silver batch into ClickHouse: {len(rows)} rows",
-        flush=True,
+    logger.info(
+        f"Inserted Silver batch into ClickHouse: {len(rows)} rows"
     )
 
 
 def main():
+    setup_logging("clickhouse_bronze_consumer")
     consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
     avro_deserializer = get_avro_deserializer()
@@ -110,10 +111,9 @@ def main():
     last_offsets = {}
     last_flush_time = time.monotonic()
 
-    print(
+    logger.info(
         f"ClickHouse Silver consumer started, "
-        f"listening on topic '{TOPIC}'...",
-        flush=True,
+        f"listening on topic '{TOPIC}'..."
     )
 
     try:
@@ -171,10 +171,7 @@ def main():
 
             except Exception as e:
 
-                print(
-                    f"Deserialization ERROR: {e}",
-                    flush=True,
-                )
+                logger.error(f"Deserialization ERROR: {e}")
 
                 deserialization_errors_total.inc()
                 send_to_dlq(
@@ -226,10 +223,7 @@ def main():
 
     except KeyboardInterrupt:
 
-        print(
-            "\nClickHouse Silver consumer stopped by user.",
-            flush=True,
-        )
+        logger.warning("\nClickHouse Silver consumer stopped by user.")
 
     finally:
 
@@ -267,5 +261,4 @@ def main():
 
 if __name__ == "__main__":
     start_http_server(8005, addr="0.0.0.0")
-    logging.basicConfig(level=logging.INFO)
     main()
