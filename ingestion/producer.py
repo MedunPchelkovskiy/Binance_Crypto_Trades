@@ -20,7 +20,7 @@ pending_trades = {}
 
 def delivery_report(err, msg):
     agg_trade_id = int(msg.key().decode())
-    start_time = pending_trades.pop(agg_trade_id, None)
+    start_time = pending_trades.pop(agg_trade_id)
     if err is not None:
         kafka_delivery_errors_total.inc()
         logger.error("Delivery failed for record %s:", err)
