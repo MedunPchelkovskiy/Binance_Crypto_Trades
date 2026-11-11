@@ -101,7 +101,7 @@ def write_batch_to_clickhouse(clickhouse_client, records):
 
 
 def main():
-    setup_logging("clickhouse_bronze_consumer")
+    setup_logging("clickhouse_silver_consumer")
     consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
     avro_deserializer = get_avro_deserializer()

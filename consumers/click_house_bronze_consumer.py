@@ -168,4 +168,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # start_http_server(8005, addr="0.0.0.0") TODO: add server with proper port!!!!
     main()

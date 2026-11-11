@@ -15,7 +15,7 @@ from decouple import config
 from clients.kafka_clients import get_producer
 from monitoring.prometheus_metrics import dlq_messages_total
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("DLQ publisher")
 
 DLQ_TOPIC = config("DLQ_TOPIC", default="trade_streams_avro_dlq")
 DLQ_FLUSH_TIMEOUT_SEC = 10
