@@ -12,7 +12,7 @@ from decouple import config
 from monitoring.prometheus_metrics import binance_messages_received_total, \
     binance_reconnects_total, binance_connection_errors, binance_stream_healthy, binance_message_rate
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("binance_client")
 
 STREAM_TIMEOUT_SEC = 30
 RECONNECT_DELAY_SEC = 5
