@@ -322,45 +322,38 @@ CHUNK_SIZE = 50_000  # max id span of one chunk
 MAX_RUNTIME_SEC = 2400  # keep below the DAG interval
 
 
-def split_into_chunks(gaps, chunk_size):
-    """Pure function: ascending, per-symbol chunks whose id span <= chunk_size.
+def split_into_chunks(ranges, chunk_size):
+    """Pure function: cuts each checked range into ascending chunks of <= chunk_size ids.
 
-    Small gaps of one symbol are packed into one chunk; a gap larger than
-    chunk_size is cut. A chunk is the unit of publish -> verify -> watermark.
+    A chunk is the unit of find gaps -> fetch -> publish -> verify -> watermark.
     """
     chunks = []
-    current = None
-    for gap in sorted(gaps, key=lambda g: (g["symbol"], g["from_id"])):
-        symbol, start = gap["symbol"], gap["from_id"]
-        while start <= gap["to_id"]:
-            if (current is None or current["symbol"] != symbol
-                    or start > current["from_id"] + chunk_size - 1):
-                current = {"symbol": symbol, "from_id": start,
-                           "to_id": start, "gaps": []}
-                chunks.append(current)
-            end = min(gap["to_id"], current["from_id"] + chunk_size - 1)
-            current["gaps"].append({"symbol": symbol, "from_id": start, "to_id": end})
-            current["to_id"] = end
+    for r in sorted(ranges, key=lambda r: (r["symbol"], r["from_id"])):
+        start = r["from_id"]
+        while start <= r["to_id"]:
+            end = min(r["to_id"], start + chunk_size - 1)
+            chunks.append({"symbol": r["symbol"], "from_id": start, "to_id": end})
             start = end + 1
     return chunks
 
 
-def fill_gaps(client, producer, serialize, topic, model, gaps, run_id, *,
-              http_get=requests.get, sleep=time.sleep, clock=time.monotonic,
-              chunk_size=CHUNK_SIZE, max_runtime_sec=MAX_RUNTIME_SEC,
-              verify_interval_sec=15, verify_attempts=6):
-    """Fetch -> validate -> publish -> verify -> move watermark, chunk by chunk.
+def process_ranges(client, producer, serialize, topic, model, ranges, run_id, *,
+                   http_get=requests.get, sleep=time.sleep, clock=time.monotonic,
+                   chunk_size=CHUNK_SIZE, max_runtime_sec=MAX_RUNTIME_SEC,
+                   verify_interval_sec=15, verify_attempts=6):
+    """Per chunk: find gaps -> fetch -> validate -> publish -> verify -> move watermark.
 
-    Only counters are returned (small XCom payload); trades never leave
-    this function.
+    A chunk with no gaps still moves the watermark to its end: find_gaps has
+    just scanned the whole chunk, so empty result = proven complete.
+    Only counters are returned (small XCom payload).
     """
     started = clock()
-    stats = {"chunks_done": 0, "published": 0, "rejected": 0,
+    stats = {"chunks_done": 0, "gaps_found": 0, "published": 0, "rejected": 0,
              "remaining_gaps": 0, "stopped_by_time": False,
              "rate_limited": False, "retry_after_sec": None}
     blocked = set()  # symbol with an unfilled gap: later chunks must not move its watermark
 
-    for chunk in split_into_chunks(gaps, chunk_size):
+    for chunk in split_into_chunks(ranges, chunk_size):
         symbol = chunk["symbol"]
         if symbol in blocked:
             continue
@@ -369,29 +362,36 @@ def fill_gaps(client, producer, serialize, topic, model, gaps, run_id, *,
             stats["stopped_by_time"] = True
             break
 
-        try:
-            trades = get_binance_data(chunk["gaps"], http_get=http_get,
-                                      max_trades=chunk_size, sleep=sleep)
-        except requests.HTTPError as e:
-            if not is_rate_limited(e):
-                raise
-            stats["rate_limited"] = True
-            stats["retry_after_sec"] = e.response.headers.get("Retry-After")
-            break
-        valid, invalid = validate_trades(trades, model)
-        publish_trades(valid, producer, serialize, topic)
+        window = [chunk]
+        gaps = find_gaps(client, window)  # only this chunk's ids are loaded in memory
+        valid, invalid = [], []
 
-        window = [{"symbol": symbol, "from_id": chunk["from_id"], "to_id": chunk["to_id"]}]
-        if valid:
-            remaining = wait_for_silver(client, window, sleep,
-                                        verify_interval_sec, verify_attempts)
+        if gaps:
+            try:
+                trades = get_binance_data(gaps, http_get=http_get,
+                                          max_trades=chunk_size, sleep=sleep)
+            except requests.HTTPError as e:
+                if not is_rate_limited(e):
+                    raise
+                stats["rate_limited"] = True
+                stats["retry_after_sec"] = e.response.headers.get("Retry-After")
+                break
+            valid, invalid = validate_trades(trades, model)
+            publish_trades(valid, producer, serialize, topic)
+
+            if valid:
+                remaining = wait_for_silver(client, window, sleep,
+                                            verify_interval_sec, verify_attempts)
+            else:
+                remaining = find_gaps(client, window)
         else:
-            remaining = find_gaps(client, window)
+            remaining = []  # nothing missing: watermark goes to the chunk end
 
         watermarks = compute_new_watermarks(window, remaining)
-        save_watermarks(client, watermarks, chunk["gaps"], remaining, run_id)
+        save_watermarks(client, watermarks, gaps, remaining, run_id)
 
         stats["chunks_done"] += 1
+        stats["gaps_found"] += len(gaps)
         stats["published"] += len(valid)
         stats["rejected"] += len(invalid)
         stats["remaining_gaps"] += len(remaining)
