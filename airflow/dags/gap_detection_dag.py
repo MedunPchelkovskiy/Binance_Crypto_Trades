@@ -18,24 +18,18 @@ def check_data():
     return backfill_logic.check_data(get_clickhouse_client(), SYMBOLS)
 
 
-@task
-def find_gaps(ranges):
-    # Thin wrapper: ranges come from check_data via XCom.
-    return backfill_logic.find_gaps(get_clickhouse_client(), ranges)
-
-
 # Hard stop at 45 min: the logic stops itself after 40 (MAX_RUNTIME_SEC),
 # this is the safety net before the next hourly run.
 @task(execution_timeout=timedelta(minutes=45))
-def fill_gaps(gaps, run_id=None):
-    # run_id is injected by Airflow from the task context.
+def process_ranges(ranges, run_id=None):
+    # Gap detection, filling and watermark moves all happen inside, chunk by chunk.
     avro_serializer = get_avro_serializer()
 
     def serialize(trade):
         return avro_serializer(trade, SerializationContext(TOPIC, MessageField.VALUE))
 
-    stats = backfill_logic.fill_gaps(
-        get_clickhouse_client(), get_producer(), serialize, TOPIC, Trade, gaps, run_id
+    stats = backfill_logic.process_ranges(
+        get_clickhouse_client(), get_producer(), serialize, TOPIC, Trade, ranges, run_id
     )
     if stats["rate_limited"]:
         logging.warning(
@@ -55,8 +49,7 @@ def fill_gaps(gaps, run_id=None):
 )
 def binance_agg_trades_backfill():
     ranges = check_data()
-    gaps = find_gaps(ranges)
-    fill_gaps(gaps)
+    process_ranges(ranges)
 
 
 binance_agg_trades_backfill()
