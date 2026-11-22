@@ -16,6 +16,7 @@ Manual offset commit — само след успешен write в MinIO. Ако
 import io
 import json
 import logging
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -102,7 +103,8 @@ def write_batch_to_minio(s3_client, records):
     logger.info("Bronze batch uploaded: %s (%s records)", key, len(records))
 
 
-def main():
+def main(stop_event=None):
+    stop_event = stop_event or threading.Event()
     setup_logging("bronze-minio-consumer")
     consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
@@ -115,7 +117,7 @@ def main():
     logger.info(f"Bronze minio consumer starting, listening topic {TOPIC} ...")
 
     try:
-        while True:
+        while not stop_event.is_set():
             msg = consumer.poll(timeout=1.0)
 
             timed_out = time.monotonic() - last_flush_time >= BATCH_TIMEOUT_SEC

@@ -11,6 +11,7 @@ Manual offset commit — only after a successful ClickHouse insert.
 """
 
 import logging
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -100,7 +101,8 @@ def write_batch_to_clickhouse(clickhouse_client, records):
     )
 
 
-def main():
+def main(stop_event=None):
+    stop_event = stop_event or threading.Event()
     setup_logging("clickhouse_silver_consumer")
     consumer = get_consumer(CONSUMER_GROUP)
     consumer.subscribe([TOPIC])
@@ -117,7 +119,7 @@ def main():
     )
 
     try:
-        while True:
+        while not stop_event.is_set():
 
             msg = consumer.poll(timeout=1.0)
 

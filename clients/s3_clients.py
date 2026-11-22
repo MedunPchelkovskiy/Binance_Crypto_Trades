@@ -10,7 +10,7 @@ def get_s3_client(endpoint_url=None, access_key=None, secret_key=None):
 
     try:
         s3_client = boto3.client(
-            "S3",
+            "s3",
             endpoint_url=endpoint_url or config("MINIO_ENDPOINT"),
             aws_access_key_id=access_key or config("MINIO_ACCESS_KEY"),
             aws_secret_access_key=secret_key or config("MINIO_SECRET_KEY"),
@@ -19,5 +19,5 @@ def get_s3_client(endpoint_url=None, access_key=None, secret_key=None):
         return s3_client
 
     except Exception:
-        logger.exception("Failed to initialize S3 client")
+        logger.exception("Failed to initialize s3 client")
         raise
