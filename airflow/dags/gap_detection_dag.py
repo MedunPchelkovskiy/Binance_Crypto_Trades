@@ -62,3 +62,7 @@ def binance_agg_trades_backfill():
 
 
 binance_agg_trades_backfill()
+
+
+# Rebuild Airflow image - backfill test 25.11
+# Ensure latest DAG and clients are deployed
