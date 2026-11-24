@@ -54,8 +54,13 @@ jobs:
               - 'requirements_files/requirements-clickhouse-consumers.txt'
             airflow:
               - 'airflow/dags/**'
-              - 'dockerfiles/Dockerfile.airflow'
+              - 'airflow/plugins/**'
+              - 'clients/**'
+              - 'schemas/**'
+              - 'ingestion/**'
               - 'requirements_files/requirements-airflow.txt'
+              - 'dockerfiles/Dockerfile.airflow'
+
 
 
       - name: Debug filter output
