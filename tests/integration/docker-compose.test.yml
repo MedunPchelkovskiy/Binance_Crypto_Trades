@@ -47,7 +47,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
 
   minio:
-    image: minio/minio:latest
+    image: pchelkovskiy/minio:latest
     command: server /data --console-address ":9001"
     ports:
       - "19000:9000"
