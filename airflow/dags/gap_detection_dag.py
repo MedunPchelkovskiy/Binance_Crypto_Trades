@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 
 from confluent_kafka.serialization import SerializationContext, MessageField
+from decouple import config
 
 from airflow.sdk import dag, task
 import backfill_logic
@@ -11,6 +12,13 @@ from ingestion.validation import Trade
 
 SYMBOLS = ["bnbusdt", "btcusdt", "ethusdt"]
 TOPIC = "trade_streams_avro_dev"
+# 0 = без лимит. За тест: колко id-та най-много да се гледат на symbol за един run.
+MAX_IDS = config("BACKFILL_MAX_IDS", default=0, cast=int)
+
+def cap_ranges(ranges, max_ids):
+    if not max_ids:
+        return ranges
+    return [{**r, "to_id": min(r["to_id"], r["from_id"] + max_ids - 1)} for r in ranges]
 
 
 @task
@@ -22,6 +30,7 @@ def check_data():
 # this is the safety net before the next hourly run.
 @task(execution_timeout=timedelta(minutes=45))
 def process_ranges(ranges, run_id=None):
+    ranges = cap_ranges(ranges, MAX_IDS)
     # Gap detection, filling and watermark moves all happen inside, chunk by chunk.
     avro_serializer = get_avro_serializer()
 
