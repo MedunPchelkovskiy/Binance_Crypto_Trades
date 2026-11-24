@@ -1,5 +1,7 @@
 FROM apache/airflow:3.3.1-python3.12
 
+ENV PYTHONPATH="/opt/airflow"
+
 COPY requirements_files/requirements-airflow.txt /requirements-airflow.txt
 
 RUN pip install --no-cache-dir \
