@@ -305,3 +305,20 @@ jobs:
       - name: Run unit tests
         run: python -m pytest -q --tb=short
 
+  integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_files/requirements.txt
+          pip install -r requirements_files/requirements-clickhouse-consumers.txt
+          pip install -r requirements_files/requirements-bronze.txt
+          pip install pytest "testcontainers[compose]"
+      - run: python -m pytest tests/integration -q --tb=short
+
