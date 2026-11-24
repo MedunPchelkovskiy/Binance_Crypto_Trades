@@ -303,7 +303,7 @@ jobs:
           pip install pytest requests
 
       - name: Run unit tests
-        run: python -m pytest -q --tb=short
+        run: python -m pytest tests/unit -q --tb=short
 
   integration:
     runs-on: ubuntu-latest
