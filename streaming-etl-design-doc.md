@@ -417,3 +417,57 @@ streaming-etl-portfolio/
 - Втори window тип (sliding/session) за gold агрегациите
 - K8s deployment (като отделен "deployment" проект)
 - Freelance-ready packaging: ако проектът се ползва като база за freelance предлагане, обмисли multi-tenant конфигурация (различни symbol lists per client) като отделна follow-up тема
+
+
+"""Бих добавил само отделна observability логика, която да показва колко backfill сделки са достигнали Bronze, Silver и евентуално Gold.
+
+Така няма да натоварваш Airflow с отговорности, които принадлежат на ingestion pipeline-а.
+
+"Бих добавил само отделна observability логика, която да показва колко backfill сделки са достигнали Bronze, Silver и евентуално Gold.
+
+Така няма да натоварваш Airflow с отговорности, които принадлежат на ingestion pipeline-а.
+" това ще се реализира по друг начин, може би с прометеус метрики, брояч за намерените и очаквани да се запълнят дупки/ИД-та и реално намерените
+
+Да. И според мен това е по-доброто архитектурно решение — Backfill да генерира метрики, а Prometheus да следи дали възстановените данни действително преминават през целия pipeline.
+
+Бих разделил метриките на три групи:
+1. Backfill метрики (Airflow / Backfill)
+Метрика	Значение
+backfill_gaps_found_total	Общ брой открити липсващи ID
+backfill_trades_expected_total	Очакван брой сделки за възстановяване
+backfill_trades_published_total	Публикувани в Kafka
+backfill_trades_rejected_total	Отхвърлени при валидация
+backfill_gaps_remaining	Все още незапълнени диапазони
+2. Ingestion метрики
+
+Всеки consumer отчита отделно:
+Метрика	Значение
+trades_backfill_bronze_total	Backfill сделки, достигнали Bronze
+trades_backfill_silver_total	Backfill сделки, достигнали Silver
+trades_backfill_gold_total	Backfill сделки, достигнали Gold
+
+Тук използваш Kafka header source=backfill.
+3. Контролни метрики
+
+Най-интересната част е сравнението:
+
+    Очаквани сделки: 1557
+    Публикувани в Kafka: 1557
+    Достигнали Bronze: 1557
+    Достигнали Silver: 1557
+    Достигнали Gold: 1557
+
+Така ще можеш да откриваш на кое ниво има загуба или забавяне.
+Една важна архитектурна подробност
+
+Prometheus counters не са подходящи за директно сравняване на отделни DAG runs, ако не пазиш идентификатор на run.
+
+Не бих добавял run_id като Prometheus label — това създава проблем с високата кардиналност.
+
+По-добре:
+
+    Prometheus counters по symbol, stage и source.
+    run_id и подробните резултати да останат в ClickHouse.
+    Grafana да визуализира общото състояние и разликите.
+
+Моята препоръка: направи отделен Backfill Monitoring Dashboard в Grafana. Така ще имаш видимост върху възстановяването, без да смесваш бизнес логиката на Backfill с мониторинга на ingestion pipeline-а."""

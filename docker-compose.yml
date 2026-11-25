@@ -14,6 +14,16 @@ x-backfill-env: &backfill-env
   CLICKHOUSE_DATABASE: trades
   BACKFILL_MAX_IDS: 5000   # only for tests and dev, limit the ID's amount for refill
 
+x-airflow-common-env: &airflow-common-env
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+    postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
+  AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+  AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-api:8080/execution/"
+  AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET}
+  AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+
+
 services:
 
   schema-registry:
@@ -277,11 +287,7 @@ services:
         condition: service_healthy
 
     environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
-        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
-
+      <<: *airflow-common-env
 
     volumes:
       - airflow_init_logs:/opt/airflow_init/logs
@@ -312,18 +318,12 @@ services:
     container_name: airflow-api
 
     environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
-        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
-
-
+      <<: *airflow-common-env
 
     ports:
       - "8082:8080"
     volumes:
       - airflow_logs:/opt/airflow/logs
-
 
     command: api-server
 
@@ -344,12 +344,7 @@ services:
     container_name: airflow-scheduler
 
     environment:
-      <<: *backfill-env
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
-        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
-
+      <<: [*backfill-env, *airflow-common-env]
 
     volumes:
       - airflow_logs:/opt/airflow/logs
@@ -357,6 +352,8 @@ services:
     command: scheduler
 
     depends_on:
+      airflow-api:
+        condition: service_started
       airflow-postgres:
         condition: service_healthy
       kafka:
@@ -379,13 +376,7 @@ services:
     container_name: airflow-dag-processor
 
     environment:
-      <<: *backfill-env
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
-        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
-
+      <<: [*airflow-common-env, *backfill-env]
 
     volumes:
       - airflow_logs:/opt/airflow/logs
@@ -409,10 +400,7 @@ services:
     container_name: airflow-triggerer
 
     environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
-        postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__AUTH_MANAGER: ${AIRFLOW__CORE__AUTH_MANAGER}
+      <<: *airflow-common-env
 
     volumes:
       - airflow_logs:/opt/airflow/logs
