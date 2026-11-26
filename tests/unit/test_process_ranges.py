@@ -37,7 +37,18 @@ def error_response(status, headers=None):
 
 
 def make_http_get(*responses):
-    return MagicMock(side_effect=list(responses))
+    return MagicMock(
+        side_effect=[make_server_time_response(), *responses]
+    )
+
+
+def make_server_time_response():
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.headers = {}
+    resp.json.return_value = {"serverTime": 1700000000000}
+    return resp
+
 
 
 def make_producer():

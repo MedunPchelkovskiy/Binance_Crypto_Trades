@@ -12,7 +12,7 @@ x-backfill-env: &backfill-env
   CLICKHOUSE_USER: default
   CLICKHOUSE_PASSWORD: ""
   CLICKHOUSE_DATABASE: trades
-  BACKFILL_MAX_IDS: 5000   # only for tests and dev, limit the ID's amount for refill
+  BACKFILL_MAX_IDS: ${BACKFILL_MAX_IDS:-0}  # only for tests and dev, limit the ID's amount for refill
 
 x-airflow-common-env: &airflow-common-env
   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-

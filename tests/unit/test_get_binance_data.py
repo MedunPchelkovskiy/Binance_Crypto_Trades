@@ -11,13 +11,29 @@ def raw(a):
 
 
 def fake_get(pages):
-    """Returns an http_get that serves the given pages one by one."""
-    responses = []
+    """Mocks Binance server-time and aggTrades endpoints."""
+    trade_responses = []
+
     for page in pages:
         r = MagicMock()
         r.json.return_value = page
-        responses.append(r)
-    return MagicMock(side_effect=responses)
+        r.headers = {}
+        trade_responses.append(r)
+
+    trade_iterator = iter(trade_responses)
+
+    def get(url, **kwargs):
+        if url.endswith("/api/v3/time"):
+            r = MagicMock()
+            r.json.return_value = {"serverTime": 1700000000000}
+            r.headers = {}
+            return r
+
+        return next(trade_iterator)
+
+    return MagicMock(side_effect=get)
+
+
 
 
 def test_to_trade_adds_stream_fields():
