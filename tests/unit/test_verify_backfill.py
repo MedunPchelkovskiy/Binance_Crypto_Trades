@@ -58,6 +58,17 @@ def test_wait_does_not_sleep_when_already_complete(monkeypatch):
     sleep.assert_not_called()
 
 
+def test_wait_stops_polling_when_deadline_would_be_exceeded(monkeypatch):
+    find = MagicMock(return_value=[gap(1, 2)])
+    monkeypatch.setattr(airflow.dags.backfill_logic, "find_gaps", find)
+    sleep = MagicMock()
+    res = wait_for_silver(MagicMock(), [rng()], sleep=sleep, interval_sec=15,
+                          deadline=100, clock=lambda: 90)
+    assert res == [gap(1, 2)]
+    sleep.assert_not_called()
+    assert find.call_count == 1
+
+
 def test_save_watermarks_computes_found_and_filled():
     c = MagicMock()
     rows = save_watermarks(c, {"BTCUSDT": 3}, [gap(3, 6)], [gap(5, 6)], "run1")

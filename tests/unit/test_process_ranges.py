@@ -4,7 +4,9 @@ import pytest
 import requests
 
 from airflow.dags import backfill_logic
-from airflow.dags.backfill_logic import process_ranges, split_into_chunks
+from airflow.dags.backfill_logic import (
+    MAX_TRANSIENT_RETRIES, process_ranges, split_into_chunks,
+)
 from ingestion.validation import Trade
 
 
@@ -68,10 +70,17 @@ def rng(symbol="BNBUSDT", f=1, t=10):
 
 
 def run(client, producer, ranges, http_get, chunk_size=10, **kw):
+    kw.setdefault("sleep", lambda s: None)
     return process_ranges(
         client, producer, lambda t: b"x", "topic", Trade, ranges, "run-1",
-        http_get=http_get, sleep=lambda s: None, chunk_size=chunk_size, **kw,
+        http_get=http_get, chunk_size=chunk_size, **kw,
     )
+
+
+def agg_calls(http_get):
+    """Only aggTrades requests, without the server-time sync call."""
+    return [c for c in http_get.call_args_list
+            if not c.args[0].endswith("/api/v3/time")]
 
 
 @pytest.fixture
@@ -139,8 +148,9 @@ def test_multiple_chunks_processed_in_ascending_order(silver_complete):
     stats = run(client, producer, [rng(f=1, t=20)], http)
 
     assert stats["chunks_done"] == 2 and stats["published"] == 20
-    assert http.call_args_list[0].kwargs["params"]["fromId"] == 1
-    assert http.call_args_list[1].kwargs["params"]["fromId"] == 11
+    calls = agg_calls(http)
+    assert calls[0].kwargs["params"]["fromId"] == 1
+    assert calls[1].kwargs["params"]["fromId"] == 11
 
 
 # ---------- process_ranges: unfilled gaps block the symbol ----------
@@ -160,7 +170,7 @@ def test_unfilled_gap_blocks_later_chunks_of_same_symbol_only(monkeypatch):
 
     # BNB chunk 1 + BTC chunk 1; BNB chunk 2 is skipped
     assert stats["chunks_done"] == 2
-    assert http.call_count == 2
+    assert len(agg_calls(http)) == 2
     rows = [r for call in client.insert.call_args_list for r in call.args[1]]
     symbols_written = {r[0]: r[1] for r in rows}
     assert symbols_written == {"BNBUSDT": 4, "BTCUSDT": 10}  # BNB stops before its gap
@@ -200,11 +210,13 @@ def test_all_trades_invalid_never_moves_watermark(monkeypatch):
 # ---------- process_ranges: time limit ----------
 
 def test_stops_between_chunks_when_runtime_exceeded(silver_complete):
-    client, producer = MagicMock(), make_producer()
-    clock = MagicMock(side_effect=[0, 0, 10_000])  # start, chunk 1 check, chunk 2 check
+    now = {"t": 0}
+    producer = make_producer()
+    # time jumps past the limit once chunk 1 has been published
+    producer.flush.side_effect = lambda *a, **k: now.update(t=10_000) or 0
 
-    stats = run(client, producer, [rng(f=1, t=20)], make_http_get(ok_response(1, 10)),
-                clock=clock, max_runtime_sec=100)
+    stats = run(MagicMock(), producer, [rng(f=1, t=20)], make_http_get(ok_response(1, 10)),
+                clock=lambda: now["t"], max_runtime_sec=100)
 
     assert stats["stopped_by_time"] is True
     assert stats["chunks_done"] == 1
@@ -212,22 +224,23 @@ def test_stops_between_chunks_when_runtime_exceeded(silver_complete):
 
 # ---------- process_ranges: rate limit / errors ----------
 
-def test_429_on_first_request_makes_no_progress():
+def test_429_over_threshold_stops_run_without_progress():
     client, producer = MagicMock(), make_producer()
 
     stats = run(client, producer, [rng(f=1, t=100)],
-                make_http_get(error_response(429, {"Retry-After": "30"})), chunk_size=100)
+                make_http_get(error_response(429, {"Retry-After": "600"})), chunk_size=100)
 
     assert stats["rate_limited"] is True
-    assert stats["retry_after_sec"] == "30"
+    assert stats["rate_limit_status"] == 429
+    assert stats["retry_after_sec"] == "600"
     assert stats["chunks_done"] == 0
     producer.produce.assert_not_called()
     client.insert.assert_not_called()
 
 
-def test_429_on_second_chunk_keeps_first_chunk_progress(silver_complete):
+def test_429_over_threshold_on_second_chunk_keeps_first_chunk_progress(silver_complete):
     client, producer = MagicMock(), make_producer()
-    http = make_http_get(ok_response(1, 10), error_response(429))
+    http = make_http_get(ok_response(1, 10), error_response(429, {"Retry-After": "600"}))
 
     stats = run(client, producer, [rng(f=1, t=20)], http)
 
@@ -236,13 +249,63 @@ def test_429_on_second_chunk_keeps_first_chunk_progress(silver_complete):
     client.insert.assert_called_once()  # watermark only for chunk 1
 
 
+def test_429_within_threshold_waits_and_continues(silver_complete):
+    sleeps = []
+    http = make_http_get(error_response(429, {"Retry-After": "5"}), ok_response(1, 10))
+
+    stats = run(MagicMock(), make_producer(), [rng(f=1, t=10)], http, sleep=sleeps.append)
+
+    assert stats["rate_limited"] is False
+    assert stats["chunks_done"] == 1 and stats["published"] == 10
+    assert 5.0 in sleeps
+
+
+def test_418_over_threshold_stops_run():
+    stats = run(MagicMock(), make_producer(), [rng(f=1, t=10)],
+                make_http_get(error_response(418, {"Retry-After": "600"})))
+
+    assert stats["rate_limited"] is True
+    assert stats["rate_limit_status"] == 418
+    assert stats["retry_after_sec"] == "600"
+    assert stats["chunks_done"] == 0
+
+
+def test_418_without_retry_after_stops_run():
+    stats = run(MagicMock(), make_producer(), [rng(f=1, t=10)],
+                make_http_get(error_response(418)))
+
+    assert stats["rate_limited"] is True and stats["rate_limit_status"] == 418
+
+
+def test_wait_that_does_not_fit_in_runtime_stops_by_time():
+    client, producer = MagicMock(), make_producer()
+    http = make_http_get(error_response(429, {"Retry-After": "60"}))
+
+    stats = run(client, producer, [rng(f=1, t=10)], http, max_runtime_sec=30)
+
+    assert stats["stopped_by_time"] is True
+    assert stats["rate_limited"] is False
+    assert stats["chunks_done"] == 0
+    client.insert.assert_not_called()
+
+
 def test_no_rate_limit_flag_on_success(silver_complete):
     stats = run(MagicMock(), make_producer(), [rng(f=1, t=10)], make_http_get(ok_response(1, 10)))
     assert stats["rate_limited"] is False and stats["stopped_by_time"] is False
 
 
-def test_non_rate_limit_http_error_propagates():
+def test_non_rate_limit_http_error_propagates_after_retries():
     client = MagicMock()
+    errors = [error_response(500) for _ in range(MAX_TRANSIENT_RETRIES + 1)]
     with pytest.raises(requests.HTTPError):
-        run(client, make_producer(), [rng(f=1, t=10)], make_http_get(error_response(500)))
+        run(client, make_producer(), [rng(f=1, t=10)], make_http_get(*errors))
+    client.insert.assert_not_called()
+
+
+def test_client_error_propagates_without_retry():
+    client = MagicMock()
+    http = make_http_get(error_response(400))
+    with pytest.raises(requests.HTTPError):
+        run(client, make_producer(), [rng(f=1, t=10)], http)
+    assert len(agg_calls(http)) == 1
     client.insert.assert_not_called()

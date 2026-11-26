@@ -36,6 +36,11 @@ def fake_get(pages):
 
 
 
+def trade_calls(get):
+    """Only aggTrades requests, without the server-time sync call."""
+    return [c for c in get.call_args_list if not c.args[0].endswith("/api/v3/time")]
+
+
 def test_to_trade_adds_stream_fields():
     t = to_trade(raw(7), "BTCUSDT")
     assert t["e"] == "aggTrade"
@@ -54,13 +59,13 @@ def test_pagination_uses_last_id_plus_one():
     get = fake_get([[raw(1), raw(2)], [raw(3), raw(4)]])
     trades = fetch_gap_trades("BTCUSDT", 1, 4, http_get=get)
     assert [t["a"] for t in trades] == [1, 2, 3, 4]
-    assert get.call_args_list[1].kwargs["params"]["fromId"] == 3
+    assert trade_calls(get)[1].kwargs["params"]["fromId"] == 3
 
 
 def test_first_request_params():
     get = fake_get([[raw(5)]])
     fetch_gap_trades("ETHUSDT", 5, 5, http_get=get)
-    params = get.call_args.kwargs["params"]
+    params = trade_calls(get)[-1].kwargs["params"]
     assert params == {"symbol": "ETHUSDT", "fromId": 5, "limit": 1000}
 
 
@@ -68,13 +73,13 @@ def test_page_overshooting_to_id_is_truncated():
     get = fake_get([[raw(1), raw(2), raw(3), raw(4)]])
     trades = fetch_gap_trades("BTCUSDT", 1, 2, http_get=get)
     assert [t["a"] for t in trades] == [1, 2]
-    assert get.call_count == 1
+    assert len(trade_calls(get)) == 1
 
 
 def test_empty_response_stops_loop():
     get = fake_get([[]])
     assert fetch_gap_trades("BTCUSDT", 1, 100, http_get=get) == []
-    assert get.call_count == 1
+    assert len(trade_calls(get)) == 1
 
 
 def test_http_error_propagates():
@@ -88,7 +93,7 @@ def test_max_trades_stops_between_pages():
     get = fake_get([[raw(1), raw(2)], [raw(3), raw(4)]])
     trades = fetch_gap_trades("BTCUSDT", 1, 100, http_get=get, max_trades=2)
     assert [t["a"] for t in trades] == [1, 2]
-    assert get.call_count == 1
+    assert len(trade_calls(get)) == 1
 
 
 def test_get_binance_data_multiple_gaps_and_symbols():
@@ -111,7 +116,7 @@ def test_get_binance_data_budget_is_shared_across_gaps():
     ]
     trades = get_binance_data(gaps, http_get=get, max_trades=2)
     assert len(trades) == 2
-    assert get.call_count == 1  # second gap never requested
+    assert len(trade_calls(get)) == 1  # second gap never requested
 
 
 def test_get_binance_data_no_gaps_makes_no_requests():
