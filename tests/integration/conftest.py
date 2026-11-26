@@ -34,12 +34,17 @@ DDL = [
 ]
 
 
-def _connect(clickhouse_connect, host, port, timeout_sec=90):
+def _connect(host, port, timeout_sec=90):
+    # tests/conftest.py replaces clickhouse_connect.get_client with a MagicMock
+    # for the unit tests; create_client is the real function behind it and is
+    # not patched, so the integration tests get a genuine client.
+    from clickhouse_connect.driver import create_client
+
     deadline = time.monotonic() + timeout_sec
     while True:
         try:
-            return clickhouse_connect.get_client(host=host, port=port,
-                                                 username=USER, password=PASSWORD)
+            return create_client(host=host, port=port,
+                                 username=USER, password=PASSWORD)
         except Exception:
             if time.monotonic() > deadline:
                 raise
@@ -49,7 +54,7 @@ def _connect(clickhouse_connect, host, port, timeout_sec=90):
 @pytest.fixture(scope="session")
 def _clickhouse():
     container_module = pytest.importorskip("testcontainers.core.container")
-    clickhouse_connect = pytest.importorskip("clickhouse_connect")
+    pytest.importorskip("clickhouse_connect")
 
     container = (
         container_module.DockerContainer(IMAGE)
@@ -63,8 +68,7 @@ def _clickhouse():
         pytest.skip(f"Docker/ClickHouse container is not available: {exc}")
 
     try:
-        client = _connect(clickhouse_connect,
-                          container.get_container_host_ip(),
+        client = _connect(container.get_container_host_ip(),
                           int(container.get_exposed_port(8123)))
         for ddl in DDL:
             client.command(ddl)
